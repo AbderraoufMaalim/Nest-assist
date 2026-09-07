@@ -123,9 +123,10 @@ select{border:1px solid var(--exact-line);background:#fff;border-radius:6px;padd
 .delrow{color:#dde1e6;padding:0 3px;line-height:0;opacity:0}
 tr:hover .delrow{opacity:1}
 .delrow:hover{color:var(--bad)}
-/* Copier le numéro de job : discret, révélé au survol de la ligne */
+/* Copier le numéro de job : discret mais toujours visible — un bouton
+   entièrement masqué au repos ne se découvre jamais. */
 .cp{flex:0 0 auto;color:#c9cfd6;padding:5px 6px;margin-right:4px;border-radius:6px;
-  line-height:0;opacity:0}
+  line-height:0;opacity:.45}
 tr:hover .cp{opacity:1}
 .cp:hover{background:var(--exact-bg);color:var(--exact)}
 .cp:focus-visible{opacity:1;outline:2px solid var(--exact);outline-offset:1px}

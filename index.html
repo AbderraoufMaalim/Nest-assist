@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nest Assist — répartition matière</title>
+<style>
+:root{
+  --bg:#eef0f4; --panel:#fff; --line:#dde1e7; --line-strong:#a8b0ba;
+  --ink:#111720; --ink-soft:#606c7a; --ink-faint:#98a2ae;
+  --exact:#1f4fd8; --exact-bg:#eef2ff; --exact-line:#c9d5ff;
+  --ok:#0d7a3e; --ok-bg:#e6f6ec;
+  --bad:#b3261e; --bad-bg:#fdecea;
+  --warn:#8a5300; --warn-bg:#fff3df;
+  --result:#0d2b52; --result-bg:#e7eef7;
+  --pin:#b06a00; --pin-bg:#fff2dc;
+  --jb:#5b21b6; --jb-bg:#f4f0ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+input,select,textarea{font:inherit;color:inherit}
+svg{display:block;fill:currentColor}
+
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 16px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:60;
+  box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.brand{font-weight:700;font-size:15px;letter-spacing:-.2px;line-height:1.15}
+.brand small{display:block;font-weight:400;font-size:10.5px;color:var(--ink-faint);letter-spacing:.2px}
+.field{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft)}
+.field input[type=text]{border:1px solid var(--line);border-radius:6px;padding:5px 8px;
+  font-size:13px;background:#fff;outline:none}
+.field input[type=text]:focus{border-color:var(--exact);box-shadow:0 0 0 3px var(--exact-bg)}
+.field .num{width:52px;text-align:center;font-variant-numeric:tabular-nums}
+.tog{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-soft);cursor:pointer;
+  user-select:none;border:1px solid var(--line);border-radius:7px;padding:5px 10px}
+.tog input{accent-color:var(--pin);width:14px;height:14px;margin:0;cursor:pointer}
+.spacer{flex:1}
+.ghost{background:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 11px;
+  font-size:12px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px}
+.ghost:hover{border-color:var(--line-strong);color:var(--ink)}
+.prim{background:var(--exact);color:#fff;border-radius:7px;padding:7px 14px;font-size:12.5px;
+  font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.prim:hover{background:#1740b8}
+.prim:disabled{background:#c3cbe0;cursor:default}
+
+.wrap{overflow:auto;padding:16px 16px 0}
+table.grid{border-collapse:separate;border-spacing:0;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 3px rgba(16,24,40,.05)}
+.grid th,.grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0}
+.grid th:last-child,.grid td:last-child{border-right:0}
+.grid tfoot tr:last-child td{border-bottom:0}
+.idc{position:sticky;background:var(--panel);z-index:20}
+.id1{left:0;min-width:120px;width:120px}
+.id2{left:120px;min-width:118px;width:118px}
+.id3{left:238px;min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
+thead .idc{z-index:40}
+thead th{position:sticky;top:0;background:var(--panel);vertical-align:top}
+.hlabel{padding:11px 10px 9px;font-size:10.5px;font-weight:700;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.6px}
+.hlabel.c{text-align:center} .hlabel.r{text-align:right}
+
+.colhead{min-width:200px}
+.card{padding:8px 9px 0}
+.ctop{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.cname{font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px}
+.icobtn{color:#c3c9d1;padding:3px;border-radius:5px;line-height:0}
+.icobtn:hover{background:var(--bad-bg);color:var(--bad)}
+.exact{background:var(--exact-bg);border:1px solid var(--exact-line);border-radius:7px;
+  padding:7px 8px;margin-bottom:7px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:26px}
+.row+.row{margin-top:5px}
+.lab{font-size:10.5px;color:var(--exact);font-weight:700;white-space:nowrap}
+select{border:1px solid var(--exact-line);background:#fff;border-radius:6px;padding:3px 4px;
+  font-size:12px;max-width:110px;outline:none}
+.step{display:flex;align-items:center;background:#fff;border:1px solid var(--exact-line);
+  border-radius:6px;overflow:hidden}
+.step button{color:var(--exact);width:23px;height:24px;font-size:15px;line-height:1;padding:0}
+.step button:hover:not(:disabled){background:#dde5ff}
+.step button:disabled{color:#ccd4e8;cursor:default}
+.step b{min-width:19px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
+.step .u{font-size:9.5px;color:var(--ink-faint);padding-right:5px}
+.mult{margin:0 -9px;padding:7px 9px;background:var(--result-bg);border-top:1px solid #cddaea;
+  display:flex;align-items:baseline;justify-content:space-between}
+.mult .m{font-size:17px;font-weight:700;color:var(--result);font-variant-numeric:tabular-nums}
+.mult .w{font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.note{margin:0 -9px;padding:4px 9px;font-size:10.5px;background:var(--bad-bg);color:var(--bad);display:none}
+.note.on{display:block}
+
+.barwrap{margin:0 -9px;padding:8px 9px 9px;background:#fff;border-top:1px solid var(--line)}
+.barlab{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--ink-faint);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:9px;font-size:8.5px}
+.chip.lk{background:var(--pin-bg);color:var(--pin);margin-left:4px}
+.bar{position:relative;height:26px;border-radius:5px;overflow:hidden;background:#eef0f3;
+  border:1px solid #dfe3e8;touch-action:none}
+.seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;
+  font-size:9.5px;font-weight:700;color:#fff;overflow:hidden;white-space:nowrap;
+  text-shadow:0 1px 1px rgba(0,0,0,.25)}
+.div{position:absolute;top:-2px;bottom:-2px;width:11px;margin-left:-5.5px;cursor:ew-resize;z-index:5}
+.div::after{content:"";position:absolute;left:4px;top:2px;bottom:2px;width:3px;background:#fff;
+  border-radius:2px;box-shadow:0 0 0 1px rgba(16,24,40,.28)}
+.div:hover::after,.div.drag::after{background:#111720;box-shadow:0 0 0 2px #fff}
+.div.fixed{cursor:not-allowed}
+.div.fixed::after{background:var(--pin);box-shadow:0 0 0 1px #fff}
+
+.txt{width:100%;padding:10px;font-size:13px;outline:none;background:none;border:0}
+.txt:focus{background:#fffceb}
+.txt.job{font-variant-numeric:tabular-nums;font-weight:600}
+.qty{width:100%;padding:10px 8px;font-size:14px;text-align:center;border:0;background:none;
+  outline:none;font-variant-numeric:tabular-nums;font-weight:600}
+.qty:focus{background:#fffceb}
+.qty::placeholder{color:#ccd2d8;font-weight:400}
+.cellflex{display:flex;align-items:center;gap:2px}
+.swatch{width:4px;align-self:stretch;min-height:34px;border-radius:2px;flex:0 0 4px}
+.delrow{color:#d2d7dd;padding:0 4px;line-height:0}
+.delrow:hover{color:var(--bad)}
+.rev{font-size:9px;color:var(--ink-faint);padding:0 6px 6px 12px;margin-top:-6px;
+  text-transform:uppercase;letter-spacing:.4px}
+
+td.fc{padding:0;vertical-align:top}
+.cell{padding:7px 9px 9px;position:relative}
+.valrow{display:flex;align-items:baseline;justify-content:center;gap:1px;margin-bottom:3px}
+.pct{width:42px;text-align:right;border:0;background:none;outline:none;font-size:17px;font-weight:700;
+  font-variant-numeric:tabular-nums;padding:1px 2px;border-radius:4px}
+.pct:focus{background:#fffceb;box-shadow:0 0 0 2px #f0c000}
+.pcs{font-size:11px;color:var(--ink-faint);font-weight:600}
+.cell.z .pct,.cell.z .pcs{color:#c4cad1}
+.pin{position:absolute;left:4px;top:6px;color:#d6dbe1;padding:3px;border-radius:5px;line-height:0;
+  opacity:0;transition:opacity .12s}
+td.fc:hover .pin{opacity:1}
+.cell.set .pin{opacity:1;color:#d9a45a;background:#fff8ec}
+.cell.locked .pin{opacity:1;color:var(--pin);background:var(--pin-bg)}
+.pin.flash{animation:fl .45s ease 2}
+@keyframes fl{0%,100%{background:var(--pin-bg);color:var(--pin)}
+              50%{background:#f0a500;color:#fff;transform:scale(1.3)}}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:16px;background:none;
+  outline:none;margin:0;cursor:ew-resize;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;
+  background:linear-gradient(90deg,var(--sc,#0d2b52) 0 var(--p),#dfe4ea var(--p) 100%)}
+input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:#dfe4ea}
+input[type=range]::-moz-range-progress{height:5px;border-radius:3px;background:var(--sc,#0d2b52)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:#fff;border:2px solid var(--sc,#0d2b52);margin-top:-5px;box-shadow:0 1px 2px rgba(16,24,40,.25)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;
+  border:2px solid var(--sc,#0d2b52);box-shadow:0 1px 2px rgba(16,24,40,.25)}
+.cell.locked input[type=range]::-webkit-slider-runnable-track{
+  background:linear-gradient(90deg,var(--pin) 0 var(--p),#e8e2d6 var(--p) 100%)}
+.cell.locked input[type=range]::-webkit-slider-thumb{border-color:var(--pin);background:var(--pin-bg)}
+.cell.frozen input[type=range]{cursor:not-allowed;opacity:.6}
+.cell.frozen .pct{cursor:not-allowed}
+.tag{display:none}
+.tag.on{display:block;text-align:center;margin-top:3px;font-size:8.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)}
+.tag.rest{color:var(--result)} .tag.lock{color:var(--pin)}
+
+td.rc,th.rc,td.rj,th.rj{position:sticky;background:#fafbfc;z-index:20}
+th.rc,th.rj{z-index:40}
+td.rc,th.rc{border-left:2px solid var(--line-strong);min-width:96px;width:96px}
+td.rj,th.rj{min-width:104px;width:104px;background:var(--jb-bg)}
+td.rc{text-align:right;padding:8px 12px;font-variant-numeric:tabular-nums}
+td.rc b{font-size:16px;font-weight:700;display:block}
+td.rc s{display:block;font-size:9.5px;color:var(--ink-faint);text-decoration:none;margin-top:1px}
+td.rj{text-align:right;padding:8px 12px;font-size:16px;font-weight:800;color:var(--jb);
+  font-variant-numeric:tabular-nums}
+.grid tbody tr:hover td:not(.rc):not(.rj){background:#fcfdfe}
+.grid tfoot td{background:#fafbfc}
+.grid tfoot td.rj{background:#ece5ff}
+.flab{padding:9px 10px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--ink);text-align:right}
+.wgt{text-align:center;padding:9px 6px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.qsum{text-align:center;padding:9px 6px;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+td.grand{text-align:right;padding:9px 12px;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+
+.addcol{min-width:54px;background:var(--panel)}
+.plus{border:1px dashed var(--line-strong);border-radius:8px;width:36px;height:36px;margin:8px;
+  color:var(--ink-faint);display:flex;align-items:center;justify-content:center}
+.plus:hover{border-color:var(--exact);color:var(--exact);background:var(--exact-bg)}
+.addrowbar{margin:0 16px;display:flex;gap:8px}
+.addrow{border:1px dashed var(--line-strong);border-radius:8px;padding:7px 14px;font-size:12px;
+  color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;margin-top:-1px}
+.addrow:hover{border-color:var(--exact);color:var(--exact);background:var(--exact-bg)}
+
+.checks{display:flex;gap:12px;padding:16px;flex-wrap:wrap}
+.chkcard{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:9px;
+  padding:11px 14px;min-width:290px;flex:1;max-width:470px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.chkcard.ok{border-left-color:var(--ok)} .chkcard.warn{border-left-color:#d99a1e}
+.chkcard.info{border-left-color:var(--result)}
+.chkcard h3{margin:0 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint)}
+.chkcard .st{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px}
+.chkcard.ok .st{color:var(--ok)} .chkcard.warn .st{color:var(--warn)} .chkcard.info .st{color:var(--result)}
+.chkcard p{margin:5px 0 0;font-size:11.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums;line-height:1.5}
+
+/* ---------- import ---------- */
+.ovl{position:fixed;inset:0;background:rgba(17,23,32,.45);z-index:90;display:none;
+  align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+.ovl.on{display:flex}
+.modal{background:var(--panel);border-radius:12px;width:100%;max-width:820px;
+  box-shadow:0 20px 50px rgba(16,24,40,.3)}
+.mhead{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+  justify-content:space-between}
+.mhead h2{margin:0;font-size:16px}
+.mhead p{margin:3px 0 0;font-size:11.5px;color:var(--ink-faint)}
+.mbody{padding:16px 20px}
+textarea{width:100%;height:120px;border:1px solid var(--line);border-radius:8px;padding:10px;
+  font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical;outline:none}
+textarea:focus{border-color:var(--exact);box-shadow:0 0 0 3px var(--exact-bg)}
+.mfoot{padding:12px 20px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
+.prev th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--ink-faint);padding:6px 8px;border-bottom:1px solid var(--line)}
+.prev td{padding:7px 8px;border-bottom:1px solid #f0f2f5}
+.prev td.n{font-variant-numeric:tabular-nums}
+.prev tr.off td{opacity:.35}
+.prev input[type=checkbox]{accent-color:var(--exact);width:15px;height:15px;cursor:pointer}
+.hint{margin-top:12px;font-size:12px;background:var(--exact-bg);border:1px solid var(--exact-line);
+  border-radius:8px;padding:9px 11px;color:var(--result);display:flex;align-items:center;gap:9px}
+.hint label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.err{margin-top:12px;font-size:12px;background:var(--bad-bg);color:var(--bad);border-radius:8px;padding:9px 11px}
+.drop{border:2px dashed var(--line-strong);border-radius:10px;padding:26px;text-align:center;
+  cursor:pointer;color:var(--ink-soft)}
+.drop:hover,.drop.over{border-color:var(--exact);background:var(--exact-bg);color:var(--exact)}
+.drop b{display:block;font-size:14px} .drop span{font-size:11.5px;color:var(--ink-faint)}
+.psec{margin-top:16px}
+.psec h4{margin:0 0 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)}
+.pchk{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pchk div{flex:1;min-width:210px;border-radius:8px;padding:8px 11px;font-size:11.5px;line-height:1.5}
+.pchk .good{background:var(--ok-bg);color:var(--ok)}
+.pchk .fail{background:var(--bad-bg);color:var(--bad)}
+.mono{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Nest Assist<small>RÉPARTITION MATIÈRE &rarr; JOBBOSS</small></div>
+  <div class="field">Nest <input type="text" id="nestname" placeholder="ex. 58583_L49" style="width:118px"></div>
+  <div class="field">Format
+    <input type="text" class="num" id="stdlen" value="96" inputmode="numeric">&Prime; &times;
+    <input type="text" class="num" id="stdwid" value="48" inputmode="numeric">&Prime;
+  </div>
+  <label class="tog"><input type="checkbox" id="autopin">Épinglage auto en glissant</label>
+  <div class="spacer"></div>
+  <button class="prim" id="openpdf"></button>
+  <button class="ghost" id="openimp"></button>
+  <button class="ghost" id="demo">Exemple</button>
+  <button class="ghost" id="reset">Vider</button>
+</header>
+
+<div class="wrap"><table class="grid" id="grid"></table></div>
+<div class="addrowbar"><button class="addrow" id="addrow"></button></div>
+<div class="checks" id="checks"></div>
+
+<div class="ovl" id="ovl"><div class="modal">
+  <div class="mhead">
+    <div><h2>Importer des jobs</h2>
+      <p>Colle les lignes copiées du tableau « Nest à faire » du dashboard JobBOSS.</p></div>
+    <button class="icobtn" id="closeimp" style="font-size:18px;color:#98a2ae">&#10005;</button>
+  </div>
+  <div class="mbody">
+    <textarea id="pastebox" placeholder="2026/09/04&#9;MatProg&#9;&#9;AM&#9;LASER&#9;Imprimé&#9;&#9;125356&#9;R1&#9;151&#9;0&#9;BR48005-UN&#9;0,15&#9;5&#9;FCR20-48X101&#9;…"></textarea>
+    <div id="prev"></div>
+  </div>
+  <div class="mfoot">
+    <button class="prim" id="doimp" disabled>Ajouter les jobs</button>
+    <button class="ghost" id="cancelimp">Annuler</button>
+    <div class="spacer"></div>
+    <span id="impcount" style="font-size:11.5px;color:var(--ink-faint)"></span>
+  </div>
+</div></div>
+
+<div class="ovl" id="povl"><div class="modal">
+  <div class="mhead">
+    <div><h2>Importer un plan de travail</h2>
+      <p>Le PDF TruTops. Rien n&rsquo;entre dans le tableau avant que tu aies validé la lecture.</p></div>
+    <button class="icobtn" id="closepdf" style="font-size:18px;color:#98a2ae">&#10005;</button>
+  </div>
+  <div class="mbody">
+    <div class="drop" id="drop">
+      <input type="file" id="pdffile" accept="application/pdf" hidden>
+      <b>Choisir un fichier PDF</b>
+      <span>ou glisse-le ici</span>
+    </div>
+    <div id="pprev"></div>
+  </div>
+  <div class="mfoot">
+    <button class="prim" id="dopdf" disabled>Remplir le tableau</button>
+    <button class="ghost" id="cancelpdf">Annuler</button>
+    <div class="spacer"></div>
+    <span id="pdfcount" style="font-size:11.5px;color:var(--ink-faint)"></span>
+  </div>
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+"use strict";
+
+var IC = {
+  pin  : '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M6 1h4v1.2L9 3.4v3.9l2 2V10H9v5H7v-5H5V9.3l2-2V3.4L6 2.2z"/></svg>',
+  trash: '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M6.2 1h3.6l.6 1.2H14v1.6H2V2.2h3.6zM3.4 5.2h9.2l-.66 8.9a1 1 0 0 1-1 .9H5.06a1 1 0 0 1-1-.9z"/></svg>',
+  plus : '<svg viewBox="0 0 16 16" width="13" height="13"><path d="M7 2.2h2v4.8h4.8v2H9v4.8H7V9H2.2V7H7z"/></svg>',
+  check: '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M6.2 12.4 1.9 8.1l1.6-1.6 2.7 2.7 6.3-6.3 1.6 1.6z"/></svg>',
+  eye  : '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M8 3C4.4 3 1.6 5.6.6 8c1 2.4 3.8 5 7.4 5s6.4-2.6 7.4-5c-1-2.4-3.8-5-7.4-5m0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4m0-1.6a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2"/></svg>',
+  sheet: '<svg viewBox="0 0 16 16" width="11" height="11"><path d="M2.5 1.5h11v13h-11zM4 4h8v1.4H4zm0 3h8v1.4H4zm0 3h5v1.4H4z"/></svg>',
+  imp  : '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M7 1h2v6.2l2.1-2.1 1.4 1.4L8 11 3.5 6.5l1.4-1.4L7 7.2zM2 12h12v2.5H2z"/></svg>'
+};
+var PAL = ["#2563eb","#0d9488","#c2410c","#7c3aed","#b91c1c","#0369a1",
+           "#4d7c0f","#a21caf","#b45309","#0f766e","#6d28d9","#9f1239"];
+function rowColor(i){ return PAL[i % PAL.length]; }
+
+/* =============== état ===============
+   S.frac[rowId:colId] : entier 0..100, somme d'une colonne = exactement 100
+   c.st[rowId] : "free" | "set" (n'absorbe plus) | "locked" (ne bouge plus du tout) */
+var S = { std:{len:96, wid:48}, cols:[], rows:[], frac:{}, autoPin:false };
+var uid = 1;
+function key(r,c){ return r + ":" + c; }
+function get(rid,cid){ var v = S.frac[key(rid,cid)]; return v === undefined ? 0 : v; }
+function set(rid,cid,v){ S.frac[key(rid,cid)] = v; }
+
+function stOf(c,rid){ return c.st[rid] || "free"; }
+function isFree(c,rid){ return stOf(c,rid) === "free"; }
+function freeOf(c,rid){ return S.rows.filter(function(r){ return r.id !== rid && isFree(c,r.id); }); }
+function freeCount(c){ return S.rows.filter(function(r){ return isFree(c,r.id); }).length; }
+function canMove(c,rid){ return stOf(c,rid) !== "locked" && S.rows.length > 1 && freeOf(c,rid).length > 0; }
+
+function startLen(c){ return c.start === "full" ? S.std.len : +c.start; }
+function recovered(c){ return 12*c.r12 + 24*c.r24; }
+function consumed(c){ return startLen(c) - recovered(c); }
+function mult(c){ var v = consumed(c); return v > 0 ? v / S.std.len : 0; }
+function weight(c){ return mult(c) * c.qty; }
+function colSum(c){ return S.rows.reduce(function(s,r){ return s + get(r.id,c.id); }, 0); }
+function rowTotal(r){ return S.cols.reduce(function(s,c){ return s + get(r.id,c.id)/100 * weight(c); }, 0); }
+function grandW(){ return S.cols.reduce(function(s,c){ return s + weight(c); }, 0); }
+
+/* =============== répartition entière exacte =============== */
+function distribute(target, weights){
+  var n = weights.length, i;
+  if(n === 0) return [];
+  var W = weights.reduce(function(a,b){ return a+b; }, 0), out = [];
+  if(W <= 0){
+    var q = Math.floor(target/n), rest = target - q*n;
+    for(i=0;i<n;i++) out.push(q + (i < rest ? 1 : 0));
+    return out;
+  }
+  var rem = [], acc = 0;
+  for(i=0;i<n;i++){
+    var ex = target*weights[i]/W, f = Math.floor(ex);
+    out.push(f); rem.push({i:i, f:ex-f}); acc += f;
+  }
+  rem.sort(function(a,b){ return b.f - a.f; });
+  for(var k=0;k < target-acc;k++) out[rem[k % n].i]++;
+  return out;
+}
+
+/* =============== blindage "anti-JobBOSS" ===============
+   JobBOSS tronque à 2 décimales. On force chaque consommation à 2 décimales
+   de façon à ce que la somme retombe EXACTEMENT sur la matière engagée.
+   Règle du minimum 0,01 : une ligne non nulle ne peut pas tomber à 0,00,
+   sinon la Valeur JobBOSS serait une division par zéro. */
+function forced(){
+  var raw = S.rows.map(rowTotal);
+  var T = Math.round(grandW()*100);                    /* en centièmes de feuille */
+  var h = distribute(T, raw.map(function(v){ return Math.max(0,v); }));
+  var bumped = [];
+  var nz = [];
+  S.rows.forEach(function(r,i){ if(raw[i] > 0) nz.push(i); });
+  if(T >= nz.length){
+    nz.forEach(function(i){
+      if(h[i] !== 0) return;
+      var big = 0;
+      for(var k=0;k<h.length;k++) if(h[k] > h[big]) big = k;
+      if(h[big] > 1){ h[big]--; h[i] = 1; bumped.push(i); }
+    });
+  }
+  return { h:h, raw:raw, T:T, bumped:bumped };
+}
+function qtyOf(r){ var v = parseInt(r.qty,10); return isFinite(v) && v > 0 ? v : null; }
+function hasQty(){ return S.rows.length > 0 && S.rows.every(function(r){ return qtyOf(r) !== null; }); }
+/* Valeur JobBOSS = Qté / consommation, tronquée vers le bas à 2 décimales */
+function jbValue(qty, hundredths){
+  if(!qty || !hundredths) return null;
+  return Math.floor(qty / (hundredths/100) * 100) / 100;
+}
+
+/* =============== écriture d'une valeur =============== */
+function setPct(c, rid, want){
+  if(S.rows.length === 0) return false;
+  if(stOf(c,rid) === "locked") return "locked";
+  if(S.rows.length === 1){ set(rid,c.id,100); c.seen = true; return false; }
+  want = Math.max(0, Math.min(100, Math.round(want)));
+  var free = freeOf(c, rid);
+  if(free.length === 0) return "locked";
+  var held = 0;
+  S.rows.forEach(function(r){ if(r.id !== rid && !isFree(c,r.id)) held += get(r.id,c.id); });
+  var max = 100 - held, blocked = want > max;
+  want = Math.min(want, max);
+  var vals = distribute(100 - held - want, free.map(function(r){ return get(r.id,c.id); }));
+  free.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
+  set(rid,c.id,want);
+  if(S.autoPin && stOf(c,rid) === "free") c.st[rid] = "set";
+  c.seen = true;
+  return blocked;
+}
+function moveBoundary(c, i, pct){
+  var a = S.rows[i], b = S.rows[i+1];
+  if(!a || !b) return false;
+  if(stOf(c,a.id) === "locked" || stOf(c,b.id) === "locked") return false;
+  var before = 0;
+  for(var k=0;k<i;k++) before += get(S.rows[k].id, c.id);
+  var pair = get(a.id,c.id) + get(b.id,c.id);
+  var va = Math.max(0, Math.min(pair, Math.round(pct) - before));
+  set(a.id, c.id, va); set(b.id, c.id, pair - va);
+  c.seen = true;
+  return true;
+}
+function equalize(c){
+  var vals = distribute(100, S.rows.map(function(){ return 1; }));
+  S.rows.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
+  c.st = {}; c.seen = false;
+}
+function reseal(c){
+  if(S.rows.length === 0) return;
+  if(!c.seen){ equalize(c); return; }
+  Object.keys(c.st).forEach(function(id){
+    if(!S.rows.some(function(r){ return r.id == id; })) delete c.st[id];
+  });
+  var free = S.rows.filter(function(r){ return isFree(c,r.id); });
+  if(free.length === 0){
+    var all = distribute(100, S.rows.map(function(r){ return get(r.id,c.id); }));
+    S.rows.forEach(function(r,i){ set(r.id,c.id,all[i]); });
+    c.seen = false; return;
+  }
+  var held = 0;
+  S.rows.forEach(function(r){ if(!isFree(c,r.id)) held += get(r.id,c.id); });
+  var vals = distribute(Math.max(0,100-held), free.map(function(r){ return get(r.id,c.id); }));
+  free.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
+}
+
+/* =============== formatage =============== */
+function fmt(n, max){
+  if(max === undefined) max = 3;
+  if(!isFinite(n)) return "—";
+  var s = n.toFixed(max);
+  if(s.indexOf(".") >= 0) s = s.replace(/0+$/, "").replace(/\.$/, "");
+  return s.replace(".", ",");
+}
+function f2(n){ return isFinite(n) ? n.toFixed(2).replace(".", ",") : "—"; }
+function parseNum(t){
+  t = String(t).trim().replace(",", ".");
+  if(t === "") return 0;
+  var v = parseFloat(t);
+  return isFinite(v) ? v : 0;
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+
+/* =============== mutations =============== */
+function addCol(){
+  var c = {id:uid++, start:"full", r12:0, r24:0, qty:1, st:{}, seen:false};
+  S.cols.push(c);
+  if(S.rows.length) equalize(c);
+  render();
+}
+function newRow(o){
+  o = o || {};
+  return {id:uid++, job:o.job||"", piece:o.piece||"", qty:o.qty!=null?String(o.qty):"", rev:o.rev||""};
+}
+function addRow(o, quiet){
+  var r = newRow(o);
+  S.rows.push(r);
+  S.cols.forEach(function(c){ if(!c.seen) equalize(c); else set(r.id,c.id,0); });
+  if(!quiet) render();
+  return r;
+}
+function delCol(id){
+  S.cols = S.cols.filter(function(c){ return c.id !== id; });
+  Object.keys(S.frac).forEach(function(k){ if(k.split(":")[1] == id) delete S.frac[k]; });
+  render();
+}
+function delRow(id){
+  S.rows = S.rows.filter(function(r){ return r.id !== id; });
+  Object.keys(S.frac).forEach(function(k){ if(k.split(":")[0] == id) delete S.frac[k]; });
+  S.cols.forEach(reseal);
+  render();
+}
+
+/* =============== rendu =============== */
+function render(){
+  var L = S.std.len, JB = hasQty();
+  var head = '<thead><tr><th class="idc id1"><div class="hlabel">Num Job</div></th>'
+           + '<th class="idc id2"><div class="hlabel">Num Pièce</div></th>'
+           + '<th class="idc id3"><div class="hlabel c">Qté</div></th>';
+
+  S.cols.forEach(function(c, i){
+    /* Le plan de travail peut donner un format de tôle qu'on n'avait pas prévu :
+       on l'ajoute à la liste au lieu de le perdre. */
+    var vals = ["full","24","12"];
+    if(c.start !== "full" && vals.indexOf(String(c.start)) < 0) vals.push(String(c.start));
+    var opts = vals.map(function(v){
+      var lab = v === "full" ? "Feuille "+L+"″"
+              : (v === "24" || v === "12") ? "Retaille "+v+"″" : "Tôle "+v+"″";
+      return '<option value="'+v+'"'+(String(c.start)===v?' selected':'')+'>'+lab+'</option>';
+    }).join("");
+    head += '<th class="colhead" data-col="'+c.id+'"><div class="card">'
+      + '<div class="ctop"><span class="cname">Tôle '+(i+1)+'</span>'
+      +   '<button class="icobtn" data-delcol="'+c.id+'" title="Supprimer cette tôle">'+IC.trash+'</button></div>'
+      + '<div class="exact">'
+      +   '<div class="row"><span class="lab">Départ</span><select data-k="start">'+opts+'</select></div>'
+      +   '<div class="row"><span class="lab">Récupéré</span><div class="step">'
+      +     '<button data-k="r24" data-d="-1">&minus;</button><b data-o="r24">0</b>'
+      +     '<span class="u">&times;24&Prime;</span><button data-k="r24" data-d="1">+</button></div></div>'
+      +   '<div class="row"><span class="lab"></span><div class="step">'
+      +     '<button data-k="r12" data-d="-1">&minus;</button><b data-o="r12">0</b>'
+      +     '<span class="u">&times;12&Prime;</span><button data-k="r12" data-d="1">+</button></div></div>'
+      +   '<div class="row"><span class="lab">Feuilles</span><div class="step">'
+      +     '<button data-k="qty" data-d="-1">&minus;</button><b data-o="qty">1</b>'
+      +     '<span class="u">f.</span><button data-k="qty" data-d="1">+</button></div></div>'
+      + '</div>'
+      + '<div class="mult"><span class="m" data-o="mult">&times; 1</span><span class="w" data-o="wgt">= 1 f.</span></div>'
+      + '<div class="note" data-o="note"></div>'
+      + '<div class="barwrap"><div class="barlab"><span>Répartition</span>'
+      +   '<span data-o="barhint"></span></div><div class="bar" data-bar="'+c.id+'"></div></div>'
+      + '</div></th>';
+  });
+  head += '<th class="addcol"><button class="plus" id="addcol" title="Ajouter une tôle">'+IC.plus+'</button></th>'
+        + '<th class="rc" style="right:'+(JB?104:0)+'px"><div class="hlabel r">Consommation</div></th>'
+        + (JB ? '<th class="rj" style="right:0"><div class="hlabel r">Valeur JobBOSS</div></th>' : '')
+        + '</tr></thead>';
+
+  var body = '<tbody>';
+  if(S.rows.length === 0){
+    body += '<tr><td colspan="'+(S.cols.length+5)+'" style="padding:28px;text-align:center;color:#98a2ae">'
+          + 'Aucun job. Importe depuis le dashboard ou ajoute une ligne.</td></tr>';
+  }
+  S.rows.forEach(function(r, ri){
+    body += '<tr data-row="'+r.id+'">'
+      + '<td class="idc id1"><div class="cellflex">'
+      +   '<span class="swatch" style="background:'+rowColor(ri)+'"></span>'
+      +   '<button class="delrow" data-delrow="'+r.id+'" title="Supprimer ce job">'+IC.trash+'</button>'
+      +   '<input class="txt job" data-f="job" value="'+esc(r.job)+'" placeholder="125162"></div>'
+      +   (r.rev ? '<div class="rev">rév. '+esc(r.rev)+'</div>' : '') + '</td>'
+      + '<td class="idc id2"><input class="txt" data-f="piece" value="'+esc(r.piece)+'" placeholder="Piece 01">'
+      +   (r.dcode ? '<div class="rev" title="code du dashboard">↔ '+esc(r.dcode)+'</div>' : '') + '</td>'
+      + '<td class="idc id3"><input class="qty" data-f="qty" value="'+esc(r.qty)+'" placeholder="—" inputmode="numeric"></td>';
+    S.cols.forEach(function(c){
+      body += '<td class="fc"><div class="cell" data-cell="'+r.id+'-'+c.id+'" style="--sc:'+rowColor(ri)+'">'
+        + '<button class="pin" data-pinrow="'+r.id+'" data-pincol="'+c.id+'">'+IC.pin+'</button>'
+        + '<div class="valrow"><input class="pct" data-r="'+r.id+'" data-c="'+c.id+'" value="0" inputmode="numeric">'
+        +   '<span class="pcs">%</span></div>'
+        + '<input type="range" class="sl" min="0" max="100" step="1" value="0" data-r="'+r.id+'" data-c="'+c.id+'">'
+        + '<span class="tag" data-o="tag"></span></div></td>';
+    });
+    body += '<td class="addcol"></td>'
+          + '<td class="rc" style="right:'+(JB?104:0)+'px" data-o="cons"></td>'
+          + (JB ? '<td class="rj" style="right:0" data-o="jb"></td>' : '') + '</tr>';
+  });
+  body += '</tbody>';
+
+  var foot = '<tfoot><tr><td class="idc id1"><div class="flab" style="text-align:left;padding-left:12px">Total</div></td>'
+           + '<td class="idc id2"></td><td class="idc id3 qsum" data-o="qsum"></td>';
+  S.cols.forEach(function(c){ foot += '<td class="wgt" data-o="colwgt" data-col="'+c.id+'">1</td>'; });
+  foot += '<td class="addcol"></td>'
+        + '<td class="rc grand" style="right:'+(JB?104:0)+'px" data-o="grand">0</td>'
+        + (JB ? '<td class="rj" style="right:0">&mdash;</td>' : '') + '</tr></tfoot>';
+
+  document.getElementById("grid").innerHTML = head + body + foot;
+  document.getElementById("addcol").onclick = addCol;
+  refresh();
+}
+
+function drawBar(c){
+  var el = document.querySelector('.bar[data-bar="'+c.id+'"]');
+  if(!el) return;
+  var h = "", cum = 0;
+  S.rows.forEach(function(r, i){
+    var v = get(r.id, c.id);
+    if(v > 0){
+      h += '<div class="seg" style="left:'+cum+'%;width:'+v+'%;background:'+rowColor(i)+'" '
+         + 'title="'+esc(r.job || ("ligne "+(i+1)))+' — '+v+' %">'+(v >= 12 ? v+"%" : "")+'</div>';
+    }
+    cum += v;
+    if(i < S.rows.length-1){
+      var fx = stOf(c,r.id)==="locked" || stOf(c,S.rows[i+1].id)==="locked";
+      h += '<div class="div'+(fx?" fixed":"")+'" style="left:'+cum+'%" data-bd="'+i+'" data-bc="'+c.id+'" title="'
+         + (fx ? "Une des deux lignes est verrouillée" : "Glisser pour transférer entre voisins")+'"></div>';
+    }
+  });
+  el.innerHTML = h;
+}
+
+function refresh(skip){
+  S.cols.forEach(function(c){
+    var th = document.querySelector('th.colhead[data-col="'+c.id+'"]');
+    if(!th) return;
+    th.querySelector('[data-o="r12"]').textContent = c.r12;
+    th.querySelector('[data-o="r24"]').textContent = c.r24;
+    th.querySelector('[data-o="qty"]').textContent = c.qty;
+    var w = weight(c), rec = recovered(c), cons = consumed(c);
+    th.querySelector('[data-o="mult"]').textContent = "× " + fmt(mult(c),4);
+    th.querySelector('[data-o="wgt"]').textContent  = "= " + fmt(w,3) + " f.";
+    var note = th.querySelector('[data-o="note"]');
+    if(cons <= 0){ note.textContent = "Récupéré ("+rec+"″) ≥ départ ("+startLen(c)+"″)"; note.classList.add("on"); }
+    else note.classList.remove("on");
+
+    Array.prototype.forEach.call(th.querySelectorAll('.step button[data-k]'), function(b){
+      var k = b.dataset.k, d = +b.dataset.d;
+      if(d < 0) b.disabled = c[k] <= (k === "qty" ? 1 : 0);
+      else if(k === "qty") b.disabled = false;
+      else b.disabled = (rec + (k === "r24" ? 24 : 12)) >= startLen(c);
+    });
+
+    /* La colonne fait toujours 100 % par construction : le seul état qui vaille
+       la peine d'être affiché ici, c'est le nombre de valeurs verrouillées. */
+    var nLock = S.rows.filter(function(r){ return stOf(c,r.id)==="locked"; }).length;
+    th.querySelector('[data-o="barhint"]').innerHTML =
+      nLock ? '<span class="chip lk">'+IC.pin+nLock+'</span>' : '';
+
+    document.querySelector('td[data-o="colwgt"][data-col="'+c.id+'"]').textContent = fmt(w,3);
+
+    S.rows.forEach(function(r){
+      var box = document.querySelector('.cell[data-cell="'+r.id+'-'+c.id+'"]');
+      if(!box) return;
+      var v = get(r.id,c.id), st = stOf(c,r.id), mv = canMove(c,r.id);
+      var sl = box.querySelector('.sl'), pc = box.querySelector('.pct');
+      if(sl !== skip) sl.value = v;
+      if(pc !== skip && pc !== document.activeElement) pc.value = v;
+      sl.style.setProperty("--p", v + "%");
+      box.classList.toggle("z", v === 0);
+      box.classList.toggle("set", st === "set");
+      box.classList.toggle("locked", st === "locked");
+      box.classList.toggle("frozen", !mv);
+      sl.disabled = !mv; pc.readOnly = !mv;
+      box.querySelector('.pin').title = st === "locked" ? "Verrouillé — cliquer pour libérer" : "Verrouiller cette valeur";
+      var tag = box.querySelector('[data-o="tag"]'), txt = "", cls = "";
+      if(st === "locked"){ txt = "verrouillé"; cls = " lock"; }
+      else if(!mv){
+        if(isFree(c,r.id) && freeCount(c) === 1){ txt = "reste"; cls = " rest"; }
+        else txt = "bloqué";
+      }
+      tag.textContent = txt;
+      tag.className = "tag" + (txt ? " on" + cls : "");
+    });
+    drawBar(c);
+  });
+
+  /* --- consommation forcée + Valeur JobBOSS --- */
+  var F = forced(), JB = hasQty(), qsum = 0;
+  S.rows.forEach(function(r,i){
+    var tr = document.querySelector('tr[data-row="'+r.id+'"]');
+    if(!tr) return;
+    var cc = tr.querySelector('[data-o="cons"]');
+    var h = F.h[i], raw = F.raw[i];
+    var drift = Math.abs(raw - h/100) >= 0.005;
+    cc.innerHTML = '<b>'+f2(h/100)+'</b>'
+      + (drift ? '<s>brut '+fmt(raw,4)+'</s>' : '')
+      + (F.bumped.indexOf(i) >= 0 ? '<s style="color:#b06a00">min. forcé</s>' : '');
+    var jc = tr.querySelector('[data-o="jb"]');
+    if(jc){
+      var q = qtyOf(r), v = jbValue(q, h);
+      jc.textContent = v === null ? "—" : f2(v);
+    }
+    qsum += qtyOf(r) || 0;
+  });
+  var qs = document.querySelector('[data-o="qsum"]');
+  if(qs) qs.textContent = JB ? qsum : "";
+  var g = document.querySelector('[data-o="grand"]');
+  if(g) g.textContent = f2(F.T/100);
+
+  /* --- bandeau --- */
+  var toReview = S.cols.filter(function(c){ return !c.seen; }).length, n = S.cols.length;
+  var byStart = {}, sheets = 0, rec12 = 0, rec24 = 0;
+  S.cols.forEach(function(c){
+    var k = c.start === "full" ? "feuille" : "retaille " + c.start + "″";
+    byStart[k] = (byStart[k]||0) + c.qty;
+    sheets += c.qty; rec12 += c.r12*c.qty; rec24 += c.r24*c.qty;
+  });
+  var parts = Object.keys(byStart).map(function(k){ return byStart[k] + " × " + k; }).join(" + ");
+  var noQty = S.rows.filter(function(r){ return qtyOf(r) === null; }).length;
+
+  document.getElementById("checks").innerHTML =
+      '<div class="chkcard info"><h3>Matière engagée</h3><div class="st">' + IC.sheet
+    + f2(F.T/100) + " feuille" + (F.T>100?"s":"") + " de " + S.std.len + "×" + S.std.wid + '</div><p>'
+    + (n === 0 ? "—" : sheets + " tôle" + (sheets>1?"s":"") + " physique" + (sheets>1?"s":"") + " (" + parts + ")"
+       + (rec12+rec24 > 0 ? " · retailles récupérées : "
+           + (rec24?rec24+" de 24″":"") + (rec24&&rec12?" + ":"") + (rec12?rec12+" de 12″":"")
+         : " · aucune retaille récupérée"))
+    + '<br>Somme des consommations forcées = <b>' + f2(F.h.reduce(function(a,b){return a+b;},0)/100)
+    + '</b> ✔ égale la matière engagée.</p></div>'
+    + (JB ? "" : '<div class="chkcard warn"><h3>Valeur JobBOSS</h3><div class="st">'
+       + IC.eye + "Quantités manquantes</div><p>" + (S.rows.length === 0 ? "Aucun job."
+       : noQty + " job" + (noQty>1?"s":"") + " sans quantité. La colonne pièces/feuille apparaît "
+       + "dès que toutes les lignes en ont une.") + "</p></div>");
+}
+
+function flashPins(c){
+  S.rows.forEach(function(r){
+    if(isFree(c,r.id)) return;
+    var p = document.querySelector('.cell[data-cell="'+r.id+'-'+c.id+'"] .pin');
+    if(!p) return;
+    p.classList.remove("flash"); void p.offsetWidth; p.classList.add("flash");
+  });
+}
+function colOf(id){ return S.cols.filter(function(x){ return x.id === +id; })[0]; }
+
+/* =============== import dashboard ===============
+   Le dashboard est copié en TSV. On se cale sur le numéro de job : le champ
+   suivant est toujours la révision (souvent vide), puis la quantité, puis un
+   compteur, puis le code pièce. Le code matière (FCR20-48X101) donne le format. */
+function parseDashboard(text){
+  var out = [], i;
+  text.split(/\r?\n/).forEach(function(line){
+    if(!line.trim()) return;
+    /* Tabulations si elles ont survécu au copier-coller, sinon blocs de 2+ espaces.
+       Dans les deux cas on repère les champs par leur STRUCTURE, pas par leur rang :
+       la révision peut être vide (125365) ou numérique (02, 0), donc son type ne
+       dit rien et compter les champs depuis la gauche est impossible sans tabulations. */
+    var f = (line.indexOf("\t") >= 0 ? line.split("\t") : line.split(/\s{2,}/))
+              .map(function(t){ return t.trim(); });
+    var j = -1;
+    for(i=0;i<f.length;i++) if(/^\d{6}$/.test(f[i])){ j = i; break; }
+    if(j < 0) return;
+
+    /* code matière : borne droite de la zone utile */
+    var mat = "", mi = -1;
+    for(i=f.length-1;i>j;i--) if(/^[A-Z]{2,}\d*-\d+X\d+$/i.test(f[i])){ mat = f[i]; mi = i; break; }
+
+    /* ancre : le premier nombre décimal après le job.
+       Disposition constante :  … QTÉ | 0 | CODE PIÈCE | 0,19 | 5 | MATIÈRE … */
+    var d = -1, lim = mi > j ? mi : f.length;
+    for(i=j+1;i<lim;i++) if(/^\d+[,.]\d+$/.test(f[i])){ d = i; break; }
+
+    var rev = "", qty = null, piece = "", how = "ancre";
+    if(d >= j+4){
+      piece = f[d-1];
+      qty   = parseInt(f[d-3], 10);
+      rev   = f.slice(j+1, d-3).filter(function(t){ return t !== ""; }).join(" ");
+    } else {
+      /* pas d'ancre trouvée : on retombe sur les rangs, moins sûr */
+      how   = "rang";
+      rev   = f[j+1] || "";
+      qty   = parseInt(f[j+2] || "", 10);
+      piece = f[j+4] || "";
+    }
+    out.push({ job:f[j], rev:rev, qty:isFinite(qty)?qty:null, piece:piece, mat:mat, how:how });
+  });
+  return out;
+}
+function formatFromMat(mat){
+  var m = /-(\d+)X(\d+)$/i.exec(mat || "");
+  return m ? { wid:+m[1], len:+m[2] } : null;
+}
+
+/* =============== rapprochement code pièce ↔ ligne existante ===============
+   Boost et le dashboard n'écrivent pas toujours le code de la même façon
+   (BR48005-R1 vs BR48005-UN). On ne retire JAMAIS un suffixe tout seul :
+   un rapprochement approximatif est proposé, jamais appliqué en silence. */
+function normCode(s){ return String(s||"").toUpperCase().replace(/\s+/g," ").trim(); }
+function baseCode(s){ return normCode(s).replace(/[-_][A-Z0-9]{1,3}$/, ""); }
+function findMatch(code){
+  if(!code) return null;
+  var ex = S.rows.filter(function(r){ return r.piece && normCode(r.piece) === normCode(code); });
+  if(ex.length === 1) return { rowId: ex[0].id, kind:"exact" };
+  if(ex.length > 1)   return null;
+  /* suffixe différent : on ne propose que si le candidat est unique */
+  var c = S.rows.filter(function(r){ return r.piece && baseCode(r.piece) === baseCode(code); });
+  return c.length === 1 ? { rowId: c[0].id, kind:"proche" } : null;
+}
+function rowLabel(r, i){ return (r.piece || r.job || ("ligne " + (i+1))); }
+
+var IMP = { rows:[], fmt:null };
+function analyse(){
+  IMP.rows = parseDashboard(document.getElementById("pastebox").value);
+  var mats = {};
+  IMP.rows.forEach(function(r){ if(r.mat) mats[r.mat] = (mats[r.mat]||0)+1; });
+  var keys = Object.keys(mats);
+  IMP.fmt = keys.length === 1 ? formatFromMat(keys[0]) : null;
+  IMP.mat = keys.length === 1 ? keys[0] : null;
+  IMP.mixed = keys.length > 1;
+
+  var box = document.getElementById("prev");
+  if(IMP.rows.length === 0){
+    box.innerHTML = document.getElementById("pastebox").value.trim()
+      ? '<div class="err">Aucun numéro de job reconnu. Le numéro doit être un nombre à 6 chiffres, '
+        + 'et les colonnes doivent être séparées par des tabulations (copie directe du dashboard).</div>' : "";
+    document.getElementById("doimp").disabled = true;
+    document.getElementById("impcount").textContent = "";
+    return;
+  }
+  var existing = {};
+  S.rows.forEach(function(r){ if(r.job) existing[r.job] = true; });
+  var weak = 0, dup = 0, seen = {}, fuzzy = 0, merged = 0;
+  var hasRows = S.rows.length > 0;
+
+  /* liste des destinations possibles quand un plan a déjà été importé */
+  var destOpts = '<option value="0">+ nouvelle ligne</option>'
+    + S.rows.map(function(r,i){ return '<option value="'+r.id+'">'+esc(rowLabel(r,i))+'</option>'; }).join("");
+
+  var h = '<table class="prev"><thead><tr><th style="width:28px"></th><th>Job</th><th>Rév.</th>'
+        + '<th>Code pièce</th><th style="text-align:right">Qté</th>'
+        + (hasRows ? '<th>Rattacher à</th>' : '<th>Matière</th>') + '</tr></thead><tbody>';
+
+  IMP.rows.forEach(function(r,i){
+    r.dup = !!(existing[r.job] || seen[r.job]);
+    seen[r.job] = true;
+    if(r.dup) dup++;
+    if(r.how === "rang" || r.qty === null || !r.piece) weak++;
+    if(r.take === undefined) r.take = !r.dup;
+    if(r.dest === undefined){
+      var mm = hasRows ? findMatch(r.piece) : null;
+      r.dest = mm ? mm.rowId : 0;
+      r.kind = mm ? mm.kind : null;
+    }
+    if(r.dest) merged++;
+    if(r.kind === "proche") fuzzy++;
+
+    var flag = r.dup ? '<span style="color:#b06a00;font-size:10px"> déjà présent</span>'
+             : (r.how === "rang" ? '<span style="color:#b3261e;font-size:10px"> ?</span>' : '');
+    var last = hasRows
+      ? '<td><select data-dest="'+i+'">'+destOpts.replace('value="'+r.dest+'"','value="'+r.dest+'" selected')+'</select>'
+        + (r.kind === "exact" ? '<div style="font-size:9px;color:#0d7a3e;margin-top:2px">code identique</div>'
+         : r.kind === "proche" ? '<div style="font-size:9px;color:#b06a00;margin-top:2px">suffixe différent — à confirmer</div>'
+         : '') + '</td>'
+      : '<td style="color:#98a2ae">'+esc(r.mat || "—")+'</td>';
+
+    h += '<tr class="'+(r.take?"":"off")+'" data-pi="'+i+'"><td><input type="checkbox" data-take="'+i+'"'
+      + (r.take?" checked":"")+'></td>'
+      + '<td class="n"><b>'+esc(r.job)+'</b>'+flag+'</td><td>'+esc(r.rev || "—")+'</td>'
+      + '<td>'+esc(r.piece || "—")+'</td>'
+      + '<td class="n" style="text-align:right">'+(r.qty === null ? "—" : r.qty)+'</td>'
+      + last + '</tr>';
+  });
+  h += '</tbody></table>';
+
+  if(hasRows) h += '<div class="hint"><span>' + merged + ' ligne' + (merged>1?"s":"")
+     + ' rattachée' + (merged>1?"s":"") + ' à une pièce du plan, ' + (IMP.rows.length - merged)
+     + ' créée' + ((IMP.rows.length-merged)>1?"s":"") + ' en plus. '
+     + 'Rattacher remplit le numéro de job et la quantité sans ajouter de ligne.</span></div>';
+  if(fuzzy) h += '<div class="hint" style="background:var(--pin-bg);border-color:#f0d9a8;color:#8a5300">'
+     + fuzzy + ' rapprochement' + (fuzzy>1?"s":"") + ' repose' + (fuzzy>1?"nt":"") + ' sur un suffixe différent '
+     + '(ex. <b>-R1</b> côté plan, <b>-UN</b> côté dashboard). Rien n\'est retiré automatiquement — vérifie-les.</div>';
+
+  if(IMP.fmt && (IMP.fmt.len !== S.std.len || IMP.fmt.wid !== S.std.wid)){
+    h += '<div class="hint"><label><input type="checkbox" id="applyfmt" checked>'
+       + 'Appliquer le format <b>&nbsp;'+IMP.fmt.wid+' × '+IMP.fmt.len+'&Prime;</b></label>'
+       + '<span style="color:#606c7a">lu dans le code matière '+esc(IMP.mat)+' — actuellement '
+       + S.std.wid+' × '+S.std.len+'&Prime;</span></div>';
+  }
+  if(IMP.mixed) h += '<div class="err">Plusieurs matières différentes dans ce collage. '
+       + 'Le format standard n\'est pas modifié — vérifie que ces jobs vont bien sur le même nest.</div>';
+  if(dup) h += '<div class="hint" style="background:var(--pin-bg);border-color:#f0d9a8;color:#8a5300">'
+       + dup + ' job' + (dup>1?"s":"") + ' déjà présent' + (dup>1?"s":"") + ' dans le tableau — '
+       + 'décoché' + (dup>1?"s":"") + ' d\'office pour éviter les doublons.</div>';
+  if(weak) h += '<div class="err">' + weak + ' ligne' + (weak>1?"s":"")
+       + ' n\'a pas pu être lue avec certitude (marquée <b>?</b>) — vérifie sa quantité et son code pièce.</div>';
+
+  box.innerHTML = h;
+  document.getElementById("doimp").disabled = false;
+  document.getElementById("impcount").textContent = IMP.rows.length + " ligne"
+    + (IMP.rows.length>1?"s":"") + " reconnue" + (IMP.rows.length>1?"s":"");
+}
+
+/* =============== lecture du plan de travail (PDF) ===============
+   Aucun appel réseau, aucune clé d'API : pdf.js extrait le texte et ses
+   coordonnées dans le navigateur. Le PDF ne sort jamais du poste.
+   On se repère sur des ancres de mise en page, jamais sur des rangs. */
+
+/* Retire les accents SANS changer la longueur, pour que les index restent alignés. */
+var DEA = {"à":"a","â":"a","ä":"a","é":"e","è":"e","ê":"e","ë":"e","î":"i","ï":"i",
+           "ô":"o","ö":"o","ù":"u","û":"u","ü":"u","ç":"c","°":"o","’":"'"};
+function deacc(s){
+  return String(s).toLowerCase().replace(/[àâäéèêëîïôöùûüç°’]/g, function(m){ return DEA[m] || m; });
+}
+function num(s){ var v = parseFloat(String(s).replace(",", ".")); return isFinite(v) ? v : null; }
+
+/* Les titres du PDF sortent lettre par lettre ("P","l","a","n"…). On recolle les
+   fragments d'une même ligne en n'insérant un espace que s'il y a un vrai blanc
+   entre la fin d'un fragment et le début du suivant. */
+function buildLines(items){
+  var s = items.slice().sort(function(a,b){ return (a.y - b.y) || (a.x - b.x); });
+  var lines = [], cur = null;
+  s.forEach(function(i){
+    if(!cur || Math.abs(i.y - cur.y) > 3){ cur = { y:i.y, items:[], text:"" }; lines.push(cur); }
+    cur.items.push(i);
+  });
+  /* Une même ligne visuelle peut avoir des ordonnées qui diffèrent d'un pixel :
+     on ne remet dans l'ordre de lecture qu'APRÈS le regroupement. */
+  lines.forEach(function(g){
+    g.items.sort(function(a,b){ return a.x - b.x; });
+    g.items.forEach(function(i,k){
+      var prev = g.items[k-1];
+      if(prev && i.x - (prev.x + prev.w) > Math.max(0.9, i.h * 0.22)) g.text += " ";
+      i.off = g.text.length;
+      g.text += i.s;
+    });
+  });
+  return lines;
+}
+/* Cherche sur la version sans accents, rend la valeur telle qu'écrite. */
+function mx(line, re){
+  var d = deacc(line.text), m = re.exec(d);
+  if(!m) return null;
+  var g = [];
+  for(var i=1;i<m.length;i++){
+    g.push(m.indices && m.indices[i] ? line.text.slice(m.indices[i][0], m.indices[i][1]) : m[i]);
+  }
+  return { g:g, index:m.index };
+}
+function squash(s){ return deacc(s).replace(/\s+/g, ""); }
+
+async function readPlanPdf(file){
+  var pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  var pages = [];
+  for(var p=1;p<=pdf.numPages;p++){
+    var page = await pdf.getPage(p), vp = page.getViewport({scale:1});
+    var tc = await page.getTextContent();
+    var items = tc.items.map(function(it){
+      return { s: it.str, x: it.transform[4], y: vp.height - it.transform[5],
+               w: it.width || 0, h: it.height || 8 };
+    }).filter(function(i){ return i.s.trim() !== ""; });
+    pages.push({ h: vp.height, lines: buildLines(items) });
+  }
+  return parsePlan(pages);
+}
+
+/* Table "N° d'ordre | N° pièce | GeoFile | Quantité sur tôle | Pièce".
+   Les colonnes sont à des abscisses fixes : on lit par position, pas par ordre. */
+function partsTable(lines){
+  var hi = -1, i;
+  for(i=0;i<lines.length;i++)
+    if(squash(lines[i].text).indexOf("quantitesurtole") >= 0){ hi = i; break; }
+  if(hi < 0) return null;
+
+  /* On prend l'abscisse de chaque colonne sur son libellé, pas sur un écart :
+     "Quantité sur tôle :" et "Pièce" ne sont séparés que de 7 points. */
+  var H = lines[hi], d = deacc(H.text);
+  var xAt = function(off){
+    var best = null;
+    H.items.forEach(function(i){ if(i.off <= off) best = i; });
+    return best ? best.x : null;
+  };
+  var oC = d.indexOf("no piece"), oQ = d.indexOf("quantite"), oT = d.lastIndexOf("piece");
+  if(oC < 0 || oQ < 0 || oT <= oQ) return null;
+  var xCode = xAt(oC), xQte = xAt(oQ), xTot = xAt(oT);
+  if(xCode === null || xQte === null || xTot === null) return null;
+
+  var rows = [];
+  for(i=hi+1;i<lines.length;i++){
+    var L = lines[i];
+    var at = function(x){
+      return L.items.filter(function(o){ return Math.abs(o.x - x) < 8; })[0];
+    };
+    var c = at(xCode), q = at(xQte), t = at(xTot);
+    var ok = c && q && t && /^\d+$/.test(q.s.trim()) && /^\d+$/.test(t.s.trim());
+    if(!ok){ if(rows.length) break; else continue; }
+    rows.push({ code:c.s.trim(), per:+q.s.trim(), tot:+t.s.trim() });
+  }
+  return rows;
+}
+
+function parsePlan(pages){
+  var R = { plan:"", nSheets:null, progs:[], parts:[], warn:[] };
+  var all = [];
+  pages.forEach(function(pg){ pg.lines.forEach(function(l){ all.push(l); }); });
+
+  all.forEach(function(l){
+    var m;
+    if(!R.plan   && (m = mx(l, /plan de travail\s*:\s*(\S+)/d)))  R.plan = m.g[0];
+    if(R.nSheets === null && (m = mx(l, /nombre de toles\s*:?\s*(\d+)/d))) R.nSheets = +m.g[0];
+  });
+
+  /* ---- pièces et surfaces : blocs "Informations sur la pièce unitaire/tâche" ---- */
+  var cur = null;
+  all.forEach(function(l){
+    var m = mx(l, /n[o°]\s*piece\s*:\s*(.+?)\s+piece\s*:\s*(\d+)\s*$/d);
+    if(m){ cur = { code:m.g[0].trim(), qty:+m.g[1], surf:null }; return; }
+    if(!cur) return;
+    m = mx(l, /surface\s*:\s*([\d.,]+)\s*ft2/d);
+    if(m){
+      cur.surf = num(m.g[0]);
+      if(!R.parts.some(function(p){ return p.code === cur.code; })) R.parts.push(cur);
+      cur = null;
+    }
+  });
+
+  /* ---- programmes : une page "Ordres de fabrication" par programme ---- */
+  pages.forEach(function(pg){
+    var L = pg.lines, name = null, rep = null, len = null, wid = null, m;
+    for(var i=0;i<L.length;i++){
+      if(!name && /^ordres de fabrication\s*:$/.test(deacc(L[i].text).trim()) && L[i+1])
+        name = L[i+1].text.trim();
+      if(rep === null && (m = mx(L[i], /repetition\s*:?\s*(\d+)/d))) rep = +m.g[0];
+      if(len === null && (m = mx(L[i], /(\d+),0000\s*x\s*(\d+),0000\s*x\s*[\d,]+\s*in/d))){
+        len = +m.g[0]; wid = +m.g[1];
+      }
+    }
+    if(!name || rep === null) return;
+
+    var rows = partsTable(L);
+    var P = { name:name, rep:rep, len:len, wid:wid, lines:[], ok:true };
+    if(rows && rows.length){
+      rows.forEach(function(r){
+        if(r.per * P.rep !== r.tot) P.ok = false;   /* contrôle interne du PDF */
+        P.lines.push(r);
+      });
+    } else P.ok = false;
+    R.progs.push(P);
+  });
+
+  /* ---- contrôles ---- */
+  var sumRep = R.progs.reduce(function(s,p){ return s + p.rep; }, 0);
+  R.checkSheets = (R.nSheets !== null && sumRep === R.nSheets);
+  R.sumRep = sumRep;
+  R.checkQty = R.progs.length > 0 && R.progs.every(function(p){ return p.ok; });
+  R.parts.forEach(function(p){ if(p.surf === null) R.warn.push("Surface illisible : " + p.code); });
+  R.progs.forEach(function(p){ if(!p.ok) R.warn.push("Quantités douteuses sur " + p.name); });
+  return R;
+}
+
+/* Répartition au prorata des surfaces nettes, programme par programme. */
+function proratePlan(R, stdLen){
+  var surf = {};
+  R.parts.forEach(function(p){ surf[p.code] = p.surf || 0; });
+  return R.progs.map(function(P){
+    var net = P.lines.map(function(l){ return (surf[l.code] || 0) * (l.per || 0); });
+    var tot = net.reduce(function(a,b){ return a+b; }, 0);
+    var pct = distribute(100, net);
+    return { prog:P, pct:pct, net:net, netTot:tot,
+             mult: P.len ? P.len / stdLen : 1 };
+  });
+}
+
+var PDFR = null;
+function showPlan(R){
+  var box = document.getElementById("pprev");
+  var stdLen = S.std.len;
+  var pr = proratePlan(R, stdLen);
+  var engaged = pr.reduce(function(s,x){ return s + x.mult * x.prog.rep; }, 0);
+
+  var h = '<div class="psec"><h4>Plan ' + esc(R.plan) + '</h4>'
+        + '<table class="prev"><thead><tr><th>Tôle</th><th>Programme</th><th style="text-align:right">Format</th>'
+        + '<th style="text-align:right">Répét.</th><th style="text-align:right">× mult.</th>'
+        + '<th>Pièces (part de la tôle)</th></tr></thead><tbody>';
+  pr.forEach(function(x,i){
+    var P = x.prog;
+    h += '<tr><td><b>'+(i+1)+'</b></td><td class="mono">'+esc(P.name)+'</td>'
+      + '<td class="mono" style="text-align:right">'+(P.len?P.len+' × '+P.wid+'″':'—')+'</td>'
+      + '<td class="mono" style="text-align:right">'+P.rep+'</td>'
+      + '<td class="mono" style="text-align:right"><b>'+fmt(x.mult,4)+'</b></td><td>'
+      + P.lines.map(function(l,k){ return esc(l.code)+' <b>'+x.pct[k]+' %</b>'
+          + (l.per!==null?' <span style="color:#98a2ae">('+l.per+'/tôle)</span>':''); }).join('<br>')
+      + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="psec"><h4>Pièces et surfaces nettes</h4><table class="prev"><thead><tr>'
+     + '<th>Code pièce</th><th style="text-align:right">Surface</th>'
+     + '<th style="text-align:right">Qté TruTops</th></tr></thead><tbody>';
+  R.parts.forEach(function(p){
+    h += '<tr><td>'+esc(p.code)+'</td><td class="mono" style="text-align:right">'
+      + (p.surf === null ? '<span style="color:#b3261e">illisible</span>' : fmt(p.surf,6)+' ft²')
+      + '</td><td class="mono" style="text-align:right">'+(p.qty === null ? "—" : p.qty)+'</td></tr>';
+  });
+  h += '</tbody></table></div>';
+
+  h += '<div class="pchk">'
+    + '<div class="'+(R.checkSheets?"good":"fail")+'"><b>'+(R.checkSheets?"✓":"✕")+' Nombre de tôles</b><br>'
+    + 'somme des répétitions = ' + R.sumRep + ' · le PDF annonce ' + (R.nSheets===null?"—":R.nSheets) + '</div>'
+    + '<div class="'+(R.checkQty?"good":"fail")+'"><b>'+(R.checkQty?"✓":"✕")+' Quantités par tôle</b><br>'
+    + 'qté sur tôle × répétition = total, sur les ' + R.progs.length + ' programmes</div>'
+    + '</div>';
+
+  h += '<div class="hint" style="margin-top:12px"><span>Matière engagée avec le format standard actuel '
+     + '<b>'+S.std.wid+' × '+S.std.len+'″</b> : <b>'+f2(Math.round(engaged*100)/100)+' feuille'
+     + (engaged>1?"s":"")+'</b>. '
+     + 'Change le format en haut de la page si ce n\'est pas celui du bon de matière.</span></div>';
+
+  if(R.warn.length) h += '<div class="err">' + R.warn.map(esc).join("<br>") + '</div>';
+
+  box.innerHTML = h;
+  document.getElementById("dopdf").disabled = R.progs.length === 0;
+  document.getElementById("pdfcount").textContent =
+    R.progs.length + " tôle" + (R.progs.length>1?"s":"") + " · " + R.parts.length + " pièce"
+    + (R.parts.length>1?"s":"");
+}
+
+function applyPlan(R){
+  var pr = proratePlan(R, S.std.len);
+  /* Le plan redéfinit les tôles, mais on garde les lignes déjà saisies ou
+     importées du dashboard : un job déjà identifié n'est pas perdu. */
+  var keep = S.rows;
+  S.cols = []; S.rows = []; S.frac = {};
+  document.getElementById("nestname").value = R.plan;
+
+  var used = {}, byCode = {};
+  R.parts.forEach(function(p){
+    var old = keep.filter(function(r){
+      return !used[r.id] && r.piece && normCode(r.piece) === normCode(p.code);
+    })[0];
+    if(old){                       /* même code pièce : on reprend job, révision, quantité */
+      used[old.id] = true;
+      if(!old.qty && p.qty != null) old.qty = String(p.qty);
+      S.rows.push(old); byCode[p.code] = old;
+    } else {
+      var r = newRow({ job:"", piece:p.code, qty:p.qty });
+      S.rows.push(r); byCode[p.code] = r;
+    }
+  });
+  /* lignes qui n'apparaissent pas dans ce plan : conservées à 0 %, visibles */
+  keep.forEach(function(r){ if(!used[r.id] && (r.job || r.piece)) S.rows.push(r); });
+  /* une colonne par programme */
+  pr.forEach(function(x){
+    var P = x.prog;
+    var start = (P.len === S.std.len || P.len === null) ? "full" : String(P.len);
+    var c = { id:uid++, start:start, r12:0, r24:0, qty:P.rep, st:{}, seen:false };
+    S.cols.push(c);
+    S.rows.forEach(function(r){ set(r.id, c.id, 0); });
+    P.lines.forEach(function(l,k){
+      var r = byCode[l.code];
+      if(r) set(r.id, c.id, x.pct[k]);
+    });
+  });
+  render();
+}
+
+/* =============== événements =============== */
+
+/* Anti-clic accidentel : seule la poignée ronde d'une glissière répond. */
+document.addEventListener("pointerdown", function(e){
+  var sl = e.target.closest && e.target.closest("input[type=range]");
+  if(!sl || sl.disabled) return;
+  var r = sl.getBoundingClientRect(), TH = 14;
+  var cx = r.left + TH/2 + (+sl.value/100)*(r.width - TH);
+  if(Math.abs(e.clientX - cx) > 13){ e.preventDefault(); sl.blur(); }
+}, true);
+
+var drag = null;
+document.addEventListener("pointerdown", function(e){
+  var d = e.target.closest && e.target.closest(".div");
+  if(!d || d.classList.contains("fixed")) return;
+  e.preventDefault();
+  drag = { bar:d.parentNode, c:colOf(d.dataset.bc), i:+d.dataset.bd, el:d };
+  d.classList.add("drag");
+  d.setPointerCapture(e.pointerId);
+});
+document.addEventListener("pointermove", function(e){
+  if(!drag) return;
+  var r = drag.bar.getBoundingClientRect();
+  moveBoundary(drag.c, drag.i, (e.clientX - r.left) / r.width * 100);
+  refresh();
+});
+document.addEventListener("pointerup", function(){
+  if(!drag) return;
+  drag.el.classList.remove("drag"); drag = null; refresh();
+});
+
+document.addEventListener("input", function(e){
+  var el = e.target;
+  if(el.classList.contains("sl")){
+    var c = colOf(el.dataset.c);
+    var blocked = setPct(c, +el.dataset.r, +el.value);
+    refresh(el);
+    el.value = get(+el.dataset.r, c.id);
+    el.style.setProperty("--p", el.value + "%");
+    if(blocked) flashPins(c);
+  } else if(el.dataset.f){
+    var tr = el.closest("tr");
+    var r = S.rows.filter(function(x){ return x.id === +tr.dataset.row; })[0];
+    if(!r) return;
+    var was = hasQty();
+    r[el.dataset.f] = el.value;
+    if(el.dataset.f === "job") S.cols.forEach(drawBar);
+    if(el.dataset.f === "qty"){
+      if(was !== hasQty()) render();       /* la colonne Valeur apparaît / disparaît */
+      else refresh(el);
+    }
+  } else if(el.id === "stdlen"){
+    var v = parseNum(el.value); if(v > 0){ S.std.len = v; render(); }
+  } else if(el.id === "stdwid"){
+    var w = parseNum(el.value); if(w > 0){ S.std.wid = w; refresh(); }
+  } else if(el.id === "pastebox"){ analyse(); }
+});
+
+document.addEventListener("change", function(e){
+  var el = e.target;
+  if(el.classList.contains("pct")){
+    var c = colOf(el.dataset.c);
+    var blk = setPct(c, +el.dataset.r, parseNum(el.value));
+    refresh();
+    if(blk) flashPins(c);
+  } else if(el.id === "autopin"){ S.autoPin = el.checked; }
+  else if(el.dataset && el.dataset.take !== undefined){
+    var i = +el.dataset.take;
+    IMP.rows[i].take = el.checked;
+    var tr = document.querySelector('.prev tr[data-pi="'+i+'"]');
+    if(tr) tr.classList.toggle("off", !el.checked);
+  } else if(el.dataset && el.dataset.dest !== undefined){
+    var j = +el.dataset.dest;
+    IMP.rows[j].dest = +el.value;
+    IMP.rows[j].kind = null;                  /* choix manuel : plus de mention automatique */
+    var note = el.parentNode.querySelector("div");
+    if(note) note.remove();
+  } else if(el.dataset && el.dataset.k === "start"){
+    var col = colOf(el.closest("th.colhead").dataset.col);
+    col.start = el.value;
+    while(recovered(col) >= startLen(col)){
+      if(col.r24 > 0) col.r24--; else if(col.r12 > 0) col.r12--; else break;
+    }
+    refresh();
+  }
+});
+
+document.addEventListener("focusin", function(e){
+  var t = e.target;
+  if((t.classList.contains("pct") || t.classList.contains("qty")) && !t.readOnly) t.select();
+});
+
+document.addEventListener("click", function(e){
+  var b = e.target.closest("button");
+  if(!b) return;
+  if(b.dataset.delcol){ delCol(+b.dataset.delcol); return; }
+  if(b.dataset.delrow){ delRow(+b.dataset.delrow); return; }
+  if(b.dataset.pinrow){
+    var c = colOf(b.dataset.pincol), rid = +b.dataset.pinrow;
+    if(stOf(c,rid) === "locked") delete c.st[rid];
+    else { c.st[rid] = "locked"; c.seen = true; }
+    refresh(); return;
+  }
+  if(b.dataset.k && b.dataset.d){
+    var col = colOf(b.closest("th.colhead").dataset.col);
+    var k = b.dataset.k, d = +b.dataset.d, nv = col[k] + d;
+    if(k === "qty"){ if(nv >= 1) col.qty = nv; }
+    else if(nv >= 0 && recovered(col) + (k === "r24" ? 24 : 12)*d < startLen(col)) col[k] = nv;
+    refresh();
+  }
+});
+
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){ document.getElementById("ovl").classList.remove("on"); return; }
+  if(e.key !== "Enter" || !e.target.classList.contains("pct")) return;
+  e.preventDefault();
+  var cells = Array.prototype.slice.call(document.querySelectorAll('.pct[data-c="'+e.target.dataset.c+'"]'));
+  var next = cells[cells.indexOf(e.target)+1];
+  if(next){ next.focus(); next.select(); }
+});
+
+document.getElementById("addrow").innerHTML = IC.plus + "Ajouter un job";
+document.getElementById("addrow").onclick = function(){ addRow(); };
+document.getElementById("openimp").innerHTML = IC.imp + "Importer des jobs";
+document.getElementById("openimp").onclick = function(){
+  document.getElementById("ovl").classList.add("on");
+  document.getElementById("pastebox").focus();
+};
+document.getElementById("closeimp").onclick =
+document.getElementById("cancelimp").onclick = function(){
+  document.getElementById("ovl").classList.remove("on");
+};
+document.getElementById("ovl").onclick = function(e){
+  if(e.target === this) this.classList.remove("on");
+};
+document.getElementById("doimp").onclick = function(){
+  var af = document.getElementById("applyfmt");
+  if(af && af.checked && IMP.fmt){
+    S.std = { len:IMP.fmt.len, wid:IMP.fmt.wid };
+    document.getElementById("stdlen").value = S.std.len;
+    document.getElementById("stdwid").value = S.std.wid;
+  }
+  IMP.rows.forEach(function(r){
+    if(r.take === false) return;
+    var row = r.dest ? S.rows.filter(function(x){ return x.id === +r.dest; })[0] : null;
+    if(row){                                   /* rattachement : on ne crée pas de ligne */
+      row.job = r.job;
+      row.rev = r.rev;
+      if(r.qty !== null) row.qty = String(r.qty);
+      if(normCode(r.piece) !== normCode(row.piece)) row.dcode = r.piece;
+    } else {
+      addRow({ job:r.job, piece:r.piece, qty:r.qty, rev:r.rev }, true);
+    }
+  });
+  document.getElementById("ovl").classList.remove("on");
+  document.getElementById("pastebox").value = "";
+  document.getElementById("prev").innerHTML = "";
+  document.getElementById("doimp").disabled = true;
+  document.getElementById("impcount").textContent = "";
+  render();
+};
+
+/* ---- import PDF ---- */
+document.getElementById("openpdf").innerHTML = IC.imp + "Importer un plan (PDF)";
+document.getElementById("openpdf").onclick = function(){
+  document.getElementById("povl").classList.add("on");
+};
+document.getElementById("closepdf").onclick =
+document.getElementById("cancelpdf").onclick = function(){
+  document.getElementById("povl").classList.remove("on");
+};
+document.getElementById("povl").onclick = function(e){
+  if(e.target === this) this.classList.remove("on");
+};
+var drop = document.getElementById("drop");
+drop.onclick = function(){ document.getElementById("pdffile").click(); };
+drop.ondragover = function(e){ e.preventDefault(); this.classList.add("over"); };
+drop.ondragleave = function(){ this.classList.remove("over"); };
+drop.ondrop = function(e){
+  e.preventDefault(); this.classList.remove("over");
+  if(e.dataTransfer.files[0]) loadPdf(e.dataTransfer.files[0]);
+};
+document.getElementById("pdffile").onchange = function(){ if(this.files[0]) loadPdf(this.files[0]); };
+
+function loadPdf(file){
+  document.getElementById("pprev").innerHTML =
+    '<div class="psec" style="color:#98a2ae">Lecture de ' + esc(file.name) + '…</div>';
+  document.getElementById("dopdf").disabled = true;
+  readPlanPdf(file).then(function(R){
+    PDFR = R;
+    drop.querySelector("b").textContent = file.name;
+    showPlan(R);
+  }).catch(function(err){
+    document.getElementById("pprev").innerHTML =
+      '<div class="err">Lecture impossible : ' + esc(err && err.message || err) + '</div>';
+  });
+}
+document.getElementById("dopdf").onclick = function(){
+  if(PDFR) applyPlan(PDFR);
+  document.getElementById("povl").classList.remove("on");
+};
+
+document.getElementById("reset").onclick = function(){
+  S.cols = []; S.rows = []; S.frac = {};
+  document.getElementById("nestname").value = "";
+  PDFR = null;
+  render();
+};
+document.getElementById("demo").onclick = function(){
+  S.std = {len:96, wid:48};
+  document.getElementById("stdlen").value = 96;
+  document.getElementById("stdwid").value = 48;
+  document.getElementById("nestname").value = "exemple photo";
+  S.frac = {};
+  S.cols = [{id:1,start:"full",r12:0,r24:0,qty:2,st:{},seen:true},
+            {id:2,start:"full",r12:0,r24:0,qty:1,st:{},seen:true},
+            {id:3,start:"full",r12:0,r24:3,qty:4,st:{},seen:true}];
+  S.rows = [{id:11,job:"125162",piece:"Piece 01",qty:"",rev:""},
+            {id:12,job:"125103",piece:"Piece 02",qty:"",rev:""},
+            {id:13,job:"125127",piece:"Piece 03",qty:"",rev:""},
+            {id:14,job:"125128",piece:"Piece 04",qty:"",rev:""}];
+  uid = 20;
+  var F = [[50,0,50],[20,70,50],[20,20,0],[10,10,0]];
+  S.rows.forEach(function(r,i){ S.cols.forEach(function(c,j){ set(r.id,c.id,F[i][j]); }); });
+  render();
+};
+
+addRow(null,true); addRow(null,true); addCol(); addCol();
+</script>
+</body>
+</html>

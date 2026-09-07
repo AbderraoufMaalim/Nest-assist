@@ -1,0 +1,9 @@
+# Plans de travail et données de production : ne JAMAIS publier.
+# Ils contiennent des noms de clients, des numéros de job et des codes pièce réels.
+plans de travail - tests/
+*.pdf
+
+# Divers
+.DS_Store
+Thumbs.db
+desktop.ini

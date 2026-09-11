@@ -101,8 +101,10 @@ table.grid{border-collapse:separate;border-spacing:0;background:var(--panel);
 .grid tfoot tr:last-child td{border-bottom:0}
 .idc{position:sticky;background:var(--panel);z-index:20}
 .id1{left:0;min-width:120px;width:120px}
-.id2{left:120px;min-width:118px;width:118px}
-.id3{left:238px;min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
+/* La largeur de "Num Pièce" suit le code le plus long (--w2, calculée au rendu) ;
+   la colonne Qté se décale d'autant pour rester collée. */
+.id2{left:120px;min-width:var(--w2,118px);width:var(--w2,118px)}
+.id3{left:calc(120px + var(--w2,118px));min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
 thead .idc{z-index:40}
 thead th{position:sticky;top:0;background:var(--panel);vertical-align:top}
 .hlabel{padding:11px 10px 9px;font-size:10.5px;font-weight:700;color:var(--ink-faint);
@@ -275,6 +277,7 @@ table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
 .prev td.n{font-variant-numeric:tabular-nums}
 .prev tr.off td{opacity:.35}
 .prev input[type=checkbox]{accent-color:var(--exact);width:15px;height:15px;cursor:pointer}
+.prev select{max-width:none;min-width:230px;padding:4px 6px}
 .hint{margin-top:12px;font-size:12px;background:var(--exact-bg);border:1px solid var(--exact-line);
   border-radius:8px;padding:9px 11px;color:var(--result);display:flex;align-items:center;gap:9px}
 .hint label{display:flex;align-items:center;gap:6px;cursor:pointer}
@@ -640,7 +643,7 @@ function render(){
       +   '<input class="txt job" data-f="job" value="'+esc(r.job)+'" placeholder="125162">'
       +   '<button class="cp" data-copyjob="'+r.id+'" title="Copier le numéro de job">'+IC.copy+'</button></div>'
       +   (r.rev ? '<div class="rev">rév. '+esc(r.rev)+'</div>' : '') + '</td>'
-      + '<td class="idc id2"><input class="txt" data-f="piece" value="'+esc(r.piece)+'" placeholder="Piece 01">'
+      + '<td class="idc id2"><input class="txt" data-f="piece" value="'+esc(r.piece)+'" placeholder="Piece 01" title="'+esc(r.piece)+'">'
       +   (r.dcode ? '<div class="rev" title="code du dashboard">↔ '+esc(r.dcode)+'</div>' : '') + '</td>'
       + '<td class="idc id3"><input class="qty" data-f="qty" value="'+esc(r.qty)+'" placeholder="—" inputmode="numeric"></td>';
     S.cols.forEach(function(c){
@@ -666,7 +669,29 @@ function render(){
 
   document.getElementById("grid").innerHTML = head + body + foot;
   document.getElementById("addcol").onclick = addCol;
+  fitPieceCol();
   refresh();
+}
+
+/* Mesure le code pièce le plus long (et le code JobBOSS affiché dessous) pour
+   que la colonne l'affiche en entier. Bornée : au-delà, le champ défile. */
+var MEASURE = null;
+function fitPieceCol(){
+  var grid = document.getElementById("grid");
+  if(!grid) return;
+  MEASURE = MEASURE || document.createElement("canvas").getContext("2d");
+  var ff = getComputedStyle(document.body).fontFamily, w = 0;
+  S.rows.forEach(function(r){
+    MEASURE.font = "13px " + ff;
+    w = Math.max(w, MEASURE.measureText(r.piece || "Piece 01").width + 24);
+    if(r.dcode){
+      var t = ("↔ " + r.dcode).toUpperCase();
+      MEASURE.font = "9px " + ff;
+      w = Math.max(w, MEASURE.measureText(t).width + t.length * 0.4 + 24);
+    }
+  });
+  w = Math.max(118, Math.min(340, Math.ceil(w)));
+  grid.style.setProperty("--w2", w + "px");
 }
 
 function drawBar(c){
@@ -852,21 +877,83 @@ function formatFromMat(mat){
 }
 
 /* =============== rapprochement code pièce ↔ ligne existante ===============
-   Boost et le dashboard n'écrivent pas toujours le code de la même façon
-   (BR48005-R1 vs BR48005-UN). On ne retire JAMAIS un suffixe tout seul :
-   un rapprochement approximatif est proposé, jamais appliqué en silence. */
+   Boost et JobBOSS n'écrivent pas toujours le même code :
+     DISK_BDA              ↔ DISK-BDA              séparateurs différents
+     SP359-LM1-BRKT-A-R00  ↔ SP359-LM1-BRKT-A      révision en plus
+     BR48005-R1            ↔ BR48005-UN            révision différente
+   Mais SP359-LM2-BRKT-A et SP359-LM2-BRKT-B sont deux pièces DIFFÉRENTES.
+   Un dernier segment différent n'est accepté que s'il ressemble à un marqueur
+   de révision (R00, R1, RA, UN, REV…, A0114) — jamais une variante A / B. */
 function normCode(s){ return String(s||"").toUpperCase().replace(/\s+/g," ").trim(); }
-function baseCode(s){ return normCode(s).replace(/[-_][A-Z0-9]{1,3}$/, ""); }
-function findMatch(code){
-  if(!code) return null;
-  var ex = S.rows.filter(function(r){ return r.piece && normCode(r.piece) === normCode(code); });
-  if(ex.length === 1) return { rowId: ex[0].id, kind:"exact" };
-  if(ex.length > 1)   return null;
-  /* suffixe différent : on ne propose que si le candidat est unique */
-  var c = S.rows.filter(function(r){ return r.piece && baseCode(r.piece) === baseCode(code); });
-  return c.length === 1 ? { rowId: c[0].id, kind:"proche" } : null;
+function codeTokens(s){ return String(s||"").toUpperCase().split(/[\s_\-.]+/).filter(Boolean); }
+var REV_RE = /^(R[A-Z0-9]{0,3}|REV[A-Z0-9]*|UN|[A-Z]\d{3,})$/;
+var TIER_TXT = { 4:"code identique", 3:"séparateurs différents",
+                 2:"révision en plus — à confirmer", 1:"révision différente — à confirmer" };
+
+/* 4 identique · 3 mêmes segments, séparateurs différents ·
+   2 l'un prolonge l'autre par une révision · 1 révisions différentes · 0 aucun lien */
+function codeTier(a, b){
+  if(!a || !b) return 0;
+  if(normCode(a) === normCode(b)) return 4;
+  var ta = codeTokens(a), tb = codeTokens(b);
+  if(!ta.length || !tb.length) return 0;
+  if(ta.join("|") === tb.join("|")) return 3;
+  var p = 0, n = Math.min(ta.length, tb.length);
+  while(p < n && ta[p] === tb[p]) p++;
+  if(p === 0) return 0;
+  var ra = ta.slice(p), rb = tb.slice(p);
+  var rev = function(t){ return t.every(function(x){ return REV_RE.test(x); }); };
+  if((!ra.length && rev(rb)) || (!rb.length && rev(ra))) return 2;
+  if(ra.length === 1 && rb.length === 1 && rev(ra) && rev(rb)) return 1;
+  return 0;
+}
+/* une ligne peut porter deux codes : celui du plan et celui de JobBOSS */
+function rowTier(code, r){ return Math.max(codeTier(code, r.piece), codeTier(code, r.dcode)); }
+
+/* Rapprochement un-pour-un, du plus sûr au moins sûr.
+   - Niveaux sûrs (4, 3) : chaque source prend la première ligne libre qui
+     correspond ; une seconde source visant la même pièce devient "jumelle".
+   - Niveaux incertains (2, 1) : seulement si la paire est unique des deux
+     côtés. Au moindre doute, rien — l'opérateur choisit à la main. */
+function assignCodes(codes, targets, allRows){
+  var res = codes.map(function(){ return null; }), taken = {};
+  var free = function(r){ return !taken[r.id]; };
+  [4,3].forEach(function(t){
+    codes.forEach(function(c,i){
+      if(res[i] || !c) return;
+      var r = targets.filter(function(x){ return free(x) && rowTier(c,x) === t; })[0];
+      if(r){ res[i] = { rowId:r.id, tier:t }; taken[r.id] = true; }
+    });
+  });
+  [2,1].forEach(function(t){
+    var changed = true;
+    while(changed){
+      changed = false;
+      codes.forEach(function(c,i){
+        if(res[i] || !c) return;
+        var cand = targets.filter(function(x){ return free(x) && rowTier(c,x) === t; });
+        if(cand.length !== 1) return;
+        var rivals = codes.filter(function(c2,j){ return j !== i && !res[j] && c2 && rowTier(c2,cand[0]) === t; });
+        if(rivals.length) return;
+        res[i] = { rowId:cand[0].id, tier:t }; taken[cand[0].id] = true; changed = true;
+      });
+    }
+  });
+  /* restée seule alors que la même pièce existe déjà : une autre job, même pièce */
+  codes.forEach(function(c,i){
+    if(res[i] || !c) return;
+    var twin = (allRows || targets).filter(function(x){ return rowTier(c,x) >= 3; })[0];
+    if(twin) res[i] = { rowId:0, tier:0, twin:twin.id };
+  });
+  return res;
 }
 function rowLabel(r, i){ return (r.piece || r.job || ("ligne " + (i+1))); }
+function rowById(id){ return S.rows.filter(function(r){ return r.id === +id; })[0]; }
+function tierNote(t){
+  if(!t || !TIER_TXT[t]) return "";
+  return '<div style="font-size:9px;margin-top:2px;color:' + (t >= 3 ? "var(--ok)" : "var(--pin)") + '">'
+       + TIER_TXT[t] + '</div>';
+}
 
 var IMP = { rows:[], fmt:null };
 function analyse(){
@@ -889,8 +976,16 @@ function analyse(){
   }
   var existing = {};
   S.rows.forEach(function(r){ if(r.job) existing[r.job] = true; });
-  var weak = 0, dup = 0, seen = {}, fuzzy = 0, merged = 0;
+  var weak = 0, dup = 0, seen = {}, fuzzy = 0, merged = 0, twins = 0;
   var hasRows = S.rows.length > 0;
+
+  /* doublons de job d'abord : ils ne doivent pas voler une pièce à une autre ligne */
+  IMP.rows.forEach(function(r){ r.dup = !!(existing[r.job] || seen[r.job]); seen[r.job] = true; });
+  seen = {};
+  /* on ne rattache qu'aux lignes encore sans job : une ligne qui a déjà
+     son job et qui porte le même code, c'est une autre job de la même pièce */
+  var A = hasRows ? assignCodes(IMP.rows.map(function(r){ return r.dup ? "" : r.piece; }),
+                                S.rows.filter(function(x){ return !x.job; }), S.rows) : [];
 
   /* liste des destinations possibles quand un plan a déjà été importé */
   var destOpts = '<option value="0">+ nouvelle ligne</option>'
@@ -901,26 +996,28 @@ function analyse(){
         + (hasRows ? '<th>Rattacher à</th>' : '<th>Matière</th>') + '</tr></thead><tbody>';
 
   IMP.rows.forEach(function(r,i){
-    r.dup = !!(existing[r.job] || seen[r.job]);
-    seen[r.job] = true;
     if(r.dup) dup++;
     if(r.how === "rang" || r.qty === null || !r.piece) weak++;
     if(r.take === undefined) r.take = !r.dup;
     if(r.dest === undefined){
-      var mm = hasRows ? findMatch(r.piece) : null;
+      var mm = A[i];
       r.dest = mm ? mm.rowId : 0;
-      r.kind = mm ? mm.kind : null;
+      r.tier = mm ? mm.tier : 0;
+      r.twin = mm && mm.twin ? mm.twin : null;
     }
     if(r.dest) merged++;
-    if(r.kind === "proche") fuzzy++;
+    if(r.tier === 1 || r.tier === 2) fuzzy++;
+    if(r.twin && !r.dest) twins++;
 
     var flag = r.dup ? '<span style="color:var(--pin);font-size:10px"> déjà présent</span>'
              : (r.how === "rang" ? '<span style="color:var(--bad);font-size:10px"> ?</span>' : '');
+    var tw = r.twin && !r.dest ? rowById(r.twin) : null;
     var last = hasRows
       ? '<td><select data-dest="'+i+'">'+destOpts.replace('value="'+r.dest+'"','value="'+r.dest+'" selected')+'</select>'
-        + (r.kind === "exact" ? '<div style="font-size:9px;color:var(--ok);margin-top:2px">code identique</div>'
-         : r.kind === "proche" ? '<div style="font-size:9px;color:var(--pin);margin-top:2px">suffixe différent — à confirmer</div>'
-         : '') + '</td>'
+        + tierNote(r.tier)
+        + (tw ? '<div style="font-size:9px;margin-top:2px;color:var(--pin)">même pièce que '
+               + esc(tw.job || tw.piece) + ' — nouvelle ligne à 0 %</div>' : '')
+        + '</td>'
       : '<td style="color:var(--ink-faint)">'+esc(r.mat || "—")+'</td>';
 
     h += '<tr class="'+(r.take?"":"off")+'" data-pi="'+i+'"><td><input type="checkbox" data-take="'+i+'"'
@@ -937,8 +1034,12 @@ function analyse(){
      + ' créée' + ((IMP.rows.length-merged)>1?"s":"") + ' en plus. '
      + 'Rattacher remplit le numéro de job et la quantité sans ajouter de ligne.</span></div>';
   if(fuzzy) h += '<div class="hint" style="background:var(--pin-bg);border-color:var(--pin-line);color:var(--warn)">'
-     + fuzzy + ' rapprochement' + (fuzzy>1?"s":"") + ' repose' + (fuzzy>1?"nt":"") + ' sur un suffixe différent '
-     + '(ex. <b>-R1</b> côté plan, <b>-UN</b> côté dashboard). Rien n\'est retiré automatiquement — vérifie-les.</div>';
+     + fuzzy + ' rapprochement' + (fuzzy>1?"s":"") + ' repose' + (fuzzy>1?"nt":"") + ' sur une révision différente '
+     + '(ex. <b>-R00</b> côté plan, absent côté JobBOSS). Vérifie-les avant d\'ajouter.</div>';
+  if(twins) h += '<div class="hint" style="background:var(--pin-bg);border-color:var(--pin-line);color:var(--warn)">'
+     + twins + ' job' + (twins>1?"s":"") + ' pour une pièce déjà rattachée à une autre job. '
+     + 'Elle' + (twins>1?"s":"") + ' arrive' + (twins>1?"nt":"") + ' sur une ligne à 0 % : '
+     + 'la part de la pièce reste sur la première job, à répartir à la main.</div>';
 
   if(IMP.fmt && (IMP.fmt.len !== S.std.len || IMP.fmt.wid !== S.std.wid)){
     h += '<div class="hint"><label><input type="checkbox" id="applyfmt" checked>'
@@ -1131,6 +1232,21 @@ function proratePlan(R, stdLen){
 }
 
 var PDFR = null;
+
+/* Rattachement pièce du plan → ligne déjà dans le tableau (jobs importés avant).
+   Recalculé à chaque ouverture de l'aperçu : il dépend de l'état du tableau.
+   Les choix faits à la main dans le menu (R.override) priment. */
+function planMapping(R){
+  var auto = assignCodes(R.parts.map(function(p){ return p.code; }), S.rows, S.rows);
+  var out = {};
+  R.parts.forEach(function(p,i){
+    var o = R.override ? R.override[p.code] : undefined;
+    if(o !== undefined && (o === 0 || rowById(o))) out[p.code] = { rowId:o, tier:0, manual:true };
+    else out[p.code] = auto[i] && auto[i].rowId ? auto[i] : { rowId:0, tier:0 };
+  });
+  return out;
+}
+
 function showPlan(R){
   var box = document.getElementById("pprev");
   var stdLen = S.std.len;
@@ -1153,15 +1269,47 @@ function showPlan(R){
   });
   h += '</tbody></table></div>';
 
+  var hasRows = S.rows.length > 0;
+  var map = planMapping(R);
+  var opts = '<option value="0">+ nouvelle ligne</option>'
+    + S.rows.map(function(r,i){
+        return '<option value="'+r.id+'">'+esc((r.job ? r.job + " · " : "") + rowLabel(r,i))+'</option>'; }).join("");
+
   h += '<div class="psec"><h4>Pièces et surfaces nettes</h4><table class="prev"><thead><tr>'
      + '<th>Code pièce</th><th style="text-align:right">Surface</th>'
-     + '<th style="text-align:right">Qté TruTops</th></tr></thead><tbody>';
-  R.parts.forEach(function(p){
+     + '<th style="text-align:right">Qté TruTops</th>'
+     + (hasRows ? '<th>Rattacher à</th>' : '') + '</tr></thead><tbody>';
+  var fuzzy = 0;
+  R.parts.forEach(function(p,i){
+    var m = map[p.code];
+    if(m.tier === 1 || m.tier === 2) fuzzy++;
     h += '<tr><td>'+esc(p.code)+'</td><td class="mono" style="text-align:right">'
       + (p.surf === null ? '<span style="color:var(--bad)">illisible</span>' : fmt(p.surf,6)+' ft²')
-      + '</td><td class="mono" style="text-align:right">'+(p.qty === null ? "—" : p.qty)+'</td></tr>';
+      + '</td><td class="mono" style="text-align:right">'+(p.qty === null ? "—" : p.qty)+'</td>'
+      + (hasRows ? '<td><select data-pmap="'+i+'">'
+          + opts.replace('value="'+m.rowId+'"','value="'+m.rowId+'" selected') + '</select>'
+          + tierNote(m.tier) + '</td>' : '')
+      + '</tr>';
   });
   h += '</tbody></table></div>';
+
+  if(hasRows){
+    var taken = {};
+    Object.keys(map).forEach(function(k){ if(map[k].rowId) taken[map[k].rowId] = true; });
+    var n = Object.keys(taken).length;
+    h += '<div class="hint"><span>' + n + ' pièce' + (n>1?"s":"") + ' rattachée' + (n>1?"s":"")
+       + ' à une job déjà dans le tableau, ' + (R.parts.length - n) + ' nouvelle' + ((R.parts.length-n)>1?"s":"")
+       + ' ligne' + ((R.parts.length-n)>1?"s":"") + '.</span></div>';
+    if(fuzzy) h += '<div class="hint" style="background:var(--pin-bg);border-color:var(--pin-line);color:var(--warn)">'
+       + fuzzy + ' rapprochement' + (fuzzy>1?"s":"") + ' sur une révision différente — vérifie-les.</div>';
+    /* jobs qui portent la même pièce qu'une autre : elles resteront à 0 % */
+    var twins = S.rows.filter(function(r){
+      return !taken[r.id] && R.parts.some(function(p){ return rowTier(p.code, r) >= 3; });
+    });
+    if(twins.length) h += '<div class="hint" style="background:var(--pin-bg);border-color:var(--pin-line);color:var(--warn)">'
+       + 'Même pièce qu\'une autre job : <b>' + twins.map(function(r){ return esc(r.job || r.piece); }).join(", ")
+       + '</b>. ' + (twins.length>1 ? "Elles resteront" : "Elle restera") + ' à 0 % — à répartir à la main.</div>';
+  }
 
   h += '<div class="pchk">'
     + '<div class="'+(R.checkSheets?"good":"fail")+'"><b>'+(R.checkSheets?"✓":"✕")+' Nombre de tôles</b><br>'
@@ -1188,17 +1336,23 @@ function applyPlan(R){
   var pr = proratePlan(R, S.std.len);
   /* Le plan redéfinit les tôles, mais on garde les lignes déjà saisies ou
      importées du dashboard : un job déjà identifié n'est pas perdu. */
+  var map = planMapping(R);        /* calculé AVANT de vider le tableau */
   var keep = S.rows;
   S.cols = []; S.rows = []; S.frac = {};
   document.getElementById("nestname").value = R.plan;
 
   var used = {}, byCode = {};
   R.parts.forEach(function(p){
-    var old = keep.filter(function(r){
-      return !used[r.id] && r.piece && normCode(r.piece) === normCode(p.code);
-    })[0];
-    if(old){                       /* même code pièce : on reprend job, révision, quantité */
+    var m = map[p.code];
+    var old = m && m.rowId && !used[m.rowId]
+      ? keep.filter(function(r){ return r.id === m.rowId; })[0] : null;
+    if(old){                       /* même pièce : on reprend job, révision, quantité */
       used[old.id] = true;
+      /* la ligne garde le code du plan (il porte la surface), celui de JobBOSS passe dessous */
+      if(normCode(old.piece) !== normCode(p.code)){
+        if(!old.dcode) old.dcode = old.piece;
+        old.piece = p.code;
+      }
       if(!old.qty && p.qty != null) old.qty = String(p.qty);
       S.rows.push(old); byCode[p.code] = old;
     } else {
@@ -1274,6 +1428,7 @@ document.addEventListener("input", function(e){
     var was = hasQty();
     r[el.dataset.f] = el.value;
     if(el.dataset.f === "job") S.cols.forEach(drawBar);
+    if(el.dataset.f === "piece"){ el.title = el.value; fitPieceCol(); }
     if(el.dataset.f === "qty"){
       if(was !== hasQty()) render();       /* la colonne Valeur apparaît / disparaît */
       else refresh(el);
@@ -1298,12 +1453,17 @@ document.addEventListener("change", function(e){
     IMP.rows[i].take = el.checked;
     var tr = document.querySelector('.prev tr[data-pi="'+i+'"]');
     if(tr) tr.classList.toggle("off", !el.checked);
+  } else if(el.dataset && el.dataset.pmap !== undefined && PDFR){
+    var p = PDFR.parts[+el.dataset.pmap];
+    PDFR.override = PDFR.override || {};
+    PDFR.override[p.code] = +el.value;
+    Array.prototype.forEach.call(el.parentNode.querySelectorAll("div"), function(d){ d.remove(); });
   } else if(el.dataset && el.dataset.dest !== undefined){
     var j = +el.dataset.dest;
     IMP.rows[j].dest = +el.value;
-    IMP.rows[j].kind = null;                  /* choix manuel : plus de mention automatique */
-    var note = el.parentNode.querySelector("div");
-    if(note) note.remove();
+    IMP.rows[j].tier = 0;                     /* choix manuel : plus de mention automatique */
+    IMP.rows[j].twin = null;
+    Array.prototype.forEach.call(el.parentNode.querySelectorAll("div"), function(d){ d.remove(); });
   } else if(el.dataset && el.dataset.k === "start"){
     var col = colOf(el.closest("th.colhead").dataset.col);
     col.start = el.value;
@@ -1425,10 +1585,13 @@ document.getElementById("doimp").onclick = function(){
     document.getElementById("stdlen").value = S.std.len;
     document.getElementById("stdwid").value = S.std.wid;
   }
+  var claimed = {};
   IMP.rows.forEach(function(r){
     if(r.take === false) return;
-    var row = r.dest ? S.rows.filter(function(x){ return x.id === +r.dest; })[0] : null;
+    /* une ligne déjà prise par une autre job de ce collage n'est pas écrasée */
+    var row = r.dest && !claimed[r.dest] ? rowById(r.dest) : null;
     if(row){                                   /* rattachement : on ne crée pas de ligne */
+      claimed[row.id] = true;
       row.job = r.job;
       row.rev = r.rev;
       if(r.qty !== null) row.qty = String(r.qty);
@@ -1448,6 +1611,9 @@ document.getElementById("doimp").onclick = function(){
 /* ---- import PDF ---- */
 document.getElementById("openpdf").innerHTML = IC.imp + "Importer un plan (PDF)";
 document.getElementById("openpdf").onclick = function(){
+  /* le dernier plan lu reste disponible : on recalcule l'aperçu contre
+     l'état ACTUEL du tableau (il a pu être vidé ou complété entre-temps) */
+  if(PDFR) showPlan(PDFR);
   document.getElementById("povl").classList.add("on");
 };
 document.getElementById("closepdf").onclick =
@@ -1465,7 +1631,10 @@ drop.ondrop = function(e){
   e.preventDefault(); this.classList.remove("over");
   if(e.dataTransfer.files[0]) loadPdf(e.dataTransfer.files[0]);
 };
-document.getElementById("pdffile").onchange = function(){ if(this.files[0]) loadPdf(this.files[0]); };
+document.getElementById("pdffile").onchange = function(){
+  if(this.files[0]) loadPdf(this.files[0]);
+  this.value = "";          /* sinon re-choisir le même fichier ne déclenche rien */
+};
 
 function loadPdf(file){
   document.getElementById("pprev").innerHTML =
@@ -1488,7 +1657,9 @@ document.getElementById("dopdf").onclick = function(){
 document.getElementById("reset").onclick = function(){
   S.cols = []; S.rows = []; S.frac = {};
   document.getElementById("nestname").value = "";
-  PDFR = null;
+  /* On garde le dernier plan lu : "Vider" puis "Remplir" doit marcher sans
+     recharger le PDF. Les choix manuels de rattachement, eux, n'ont plus d'objet. */
+  if(PDFR) PDFR.override = {};
   render();
 };
 document.getElementById("demo").onclick = function(){

@@ -116,8 +116,13 @@ table.grid{border-collapse:separate;border-spacing:0;background:var(--panel);
    la colonne Qté se décale d'autant pour rester collée. */
 .id2{left:120px;min-width:var(--w2,118px);width:var(--w2,118px)}
 .id3{left:calc(120px + var(--w2,118px));min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
+/* Plans de superposition des cellules collantes. Sans niveau explicite, tbody
+   vient après thead dans le document et se dessine donc PAR-DESSUS l'en-tête :
+   les lignes traversaient les cartes de tôle en défilant.
+     10  corps courant        20  corps collant (gauche / droite)
+     30  en-tête de colonne   40  coins (en-tête × colonne collante)         */
 thead .idc{z-index:40}
-thead th{position:sticky;top:0;background:var(--panel);vertical-align:top}
+thead th{position:sticky;top:0;background:var(--panel);vertical-align:top;z-index:30}
 .hlabel{padding:11px 10px 9px;font-size:10.5px;font-weight:700;color:var(--ink-faint);
   text-transform:uppercase;letter-spacing:.6px}
 .hlabel.c{text-align:center} .hlabel.r{text-align:right}

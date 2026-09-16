@@ -61,6 +61,12 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+/* sans ça, un display:flex plus spécifique rend visible un élément [hidden] */
+[hidden]{display:none!important}
+/* Ossature : l'app occupe la fenêtre — en-tête et bandeau d'état toujours
+   visibles, seule la grille défile. Sinon tout se tasse en haut à gauche. */
+html,body{height:100%}
+body{display:flex;flex-direction:column;overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased}
@@ -71,7 +77,7 @@ button{transition:background .13s,color .13s,border-color .13s,opacity .13s}
 button:active:not(:disabled){transform:translateY(.5px)}
 
 header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 16px;
-  display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:60;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;flex:0 0 auto;z-index:60;
   box-shadow:0 1px 3px rgba(16,24,40,.04)}
 .brand{font-weight:700;font-size:15px;letter-spacing:-.2px;line-height:1.15}
 .brand small{display:block;font-weight:400;font-size:10.5px;color:var(--ink-faint);letter-spacing:.2px}
@@ -93,7 +99,12 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 1
 .prim:hover{background:var(--prim-hover)}
 .prim:disabled{background:var(--ghost);cursor:default}
 
-.wrap{overflow:auto;padding:16px 16px 0}
+.wrap{flex:1 1 auto;overflow:auto;padding:16px}
+/* --colw : largeur d'une tôle, calculée au rendu pour occuper la place libre.
+   Les marges auto centrent la grille tant qu'elle tient ; au-delà elles
+   retombent à zéro et le défilement horizontal reprend la main. */
+/* centré tant que ça tient, collé à gauche dès que ça déborde */
+.gridbox{width:fit-content;margin:0 auto}
 table.grid{border-collapse:separate;border-spacing:0;background:var(--panel);
   border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 3px rgba(16,24,40,.05)}
 .grid th,.grid td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:0}
@@ -111,7 +122,16 @@ thead th{position:sticky;top:0;background:var(--panel);vertical-align:top}
   text-transform:uppercase;letter-spacing:.6px}
 .hlabel.c{text-align:center} .hlabel.r{text-align:right}
 
-.colhead{min-width:200px}
+/* Largeur d'une tôle : la place libre divisée par le nombre de tôles, bornée.
+   Écrite en CSS avec 100vw, elle suit le redimensionnement de la fenêtre sans
+   dépendre d'un événement JavaScript. --ncols et --fixedw sont posées au rendu
+   (elles ne changent que si la structure change, pas quand on redimensionne). */
+.colhead{min-width:clamp(200px, calc((100vw - var(--fixedw,660px)) / var(--ncols,1)), 560px)}
+/* Colonne étroite : les contrôles sont empilés. Colonne large (classe posée au
+   rendu) : ils passent sur une ligne, sinon le bloc flotte au milieu du vide. */
+.exact{max-width:230px;margin-left:auto;margin-right:auto}
+.grid.wide .exact{max-width:none;display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px}
+.grid.wide .exact .row,.grid.wide .exact .row+.row{flex:0 1 auto;margin-top:0}
 .card{padding:8px 9px 0}
 .ctop{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
 .cname{font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.6px}
@@ -240,12 +260,21 @@ td.grand{text-align:right;padding:9px 12px;font-size:17px;font-weight:800;font-v
 .plus{border:1px dashed var(--line-strong);border-radius:8px;width:36px;height:36px;margin:8px;
   color:var(--ink-faint);display:flex;align-items:center;justify-content:center}
 .plus:hover{border-color:var(--exact);color:var(--exact);background:var(--exact-bg)}
-.addrowbar{margin:0 16px;display:flex;gap:8px}
+.addrowbar{margin:0;display:flex;gap:8px}
 .addrow{border:1px dashed var(--line-strong);border-radius:8px;padding:7px 14px;font-size:12px;
   color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;margin-top:-1px}
 .addrow:hover{border-color:var(--exact);color:var(--exact);background:var(--exact-bg)}
 
-.checks{display:flex;gap:12px;padding:16px;flex-wrap:wrap}
+.checks{flex:0 0 auto;display:flex;gap:12px;padding:11px 16px;flex-wrap:wrap;
+  background:var(--panel);border-top:1px solid var(--line)}
+.checks:empty{display:none}
+/* Écran de départ : un tableau vide n'a rien à montrer, autant proposer la suite. */
+.empty{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.ecard{max-width:520px;text-align:center}
+.eico{color:var(--ink-faint);opacity:.5;display:flex;justify-content:center;margin-bottom:14px}
+.ecard h2{margin:0 0 8px;font-size:19px;letter-spacing:-.2px}
+.ecard p{margin:0 0 20px;font-size:13px;line-height:1.65;color:var(--ink-soft)}
+.ebtn{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
 .chkcard{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:9px;
   padding:11px 14px;min-width:290px;flex:1;max-width:470px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .chkcard.ok{border-left-color:var(--ok)} .chkcard.warn{border-left-color:var(--warn-accent)}
@@ -304,7 +333,8 @@ table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
     <input type="text" class="num" id="stdlen" value="96" inputmode="numeric">&Prime; &times;
     <input type="text" class="num" id="stdwid" value="48" inputmode="numeric">&Prime;
   </div>
-  <label class="tog"><input type="checkbox" id="autopin">Épinglage auto en glissant</label>
+  <label class="tog" title="Épingler automatiquement une valeur dès qu'on la glisse">
+    <input type="checkbox" id="autopin">Épinglage auto</label>
   <div class="spacer"></div>
   <button class="ghost ico" id="theme" title="Thème"></button>
   <button class="prim" id="openpdf"></button>
@@ -313,8 +343,26 @@ table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
   <button class="ghost" id="reset">Vider</button>
 </header>
 
-<div class="wrap"><table class="grid" id="grid"></table></div>
-<div class="addrowbar"><button class="addrow" id="addrow"></button></div>
+<div class="empty" id="empty" hidden>
+    <div class="ecard">
+      <div class="eico" id="eico"></div>
+      <h2>Aucun nest en cours</h2>
+      <p>Commence par le plan de travail : il pose les tôles, les pièces et une
+         première répartition au prorata des surfaces. Les jobs viennent du
+         dashboard — dans l&rsquo;ordre que tu veux, les deux se rattachent tout seuls.</p>
+      <div class="ebtn">
+        <button class="prim" id="e1"></button>
+        <button class="ghost" id="e2"></button>
+        <button class="ghost" id="e3">Partir d&rsquo;un tableau vide</button>
+      </div>
+    </div>
+</div>
+<div class="wrap" id="wrap">
+  <div class="gridbox">
+    <table class="grid" id="grid"></table>
+    <div class="addrowbar" id="addrowbar"><button class="addrow" id="addrow"></button></div>
+  </div>
+</div>
 <div class="checks" id="checks"></div>
 
 <div class="ovl" id="ovl"><div class="modal">
@@ -669,13 +717,19 @@ function render(){
 
   document.getElementById("grid").innerHTML = head + body + foot;
   document.getElementById("addcol").onclick = addCol;
+
+  var vide = S.rows.length === 0 && S.cols.length === 0;
+  document.getElementById("empty").hidden = !vide;
+  document.getElementById("wrap").hidden  = vide;
+
   fitPieceCol();
+  fitColumns();
   refresh();
 }
 
 /* Mesure le code pièce le plus long (et le code JobBOSS affiché dessous) pour
    que la colonne l'affiche en entier. Bornée : au-delà, le champ défile. */
-var MEASURE = null;
+var MEASURE = null, W2 = 118;
 function fitPieceCol(){
   var grid = document.getElementById("grid");
   if(!grid) return;
@@ -690,8 +744,29 @@ function fitPieceCol(){
       w = Math.max(w, MEASURE.measureText(t).width + t.length * 0.4 + 24);
     }
   });
-  w = Math.max(118, Math.min(340, Math.ceil(w)));
-  grid.style.setProperty("--w2", w + "px");
+  W2 = Math.max(118, Math.min(340, Math.ceil(w)));
+  grid.style.setProperty("--w2", W2 + "px");
+}
+
+/* Élargit les colonnes de tôle pour occuper la place libre. On calcule une
+   largeur plutôt que d'étirer le tableau : les colonnes collantes ont des
+   décalages en pixels qui doivent rester exacts, sinon elles se chevauchent.
+   Bénéfice concret : des glissières et des barres plus longues, donc un
+   réglage plus fin. */
+function fitColumns(){
+  var grid = document.getElementById("grid"), wrap = document.querySelector(".wrap");
+  if(!grid || !wrap) return;
+  if(!S.cols.length) return;
+  /* +48 : bordures des cellules, arrondis, et surtout la barre de défilement
+     verticale — 100vw la compte alors qu'elle n'est pas disponible. +32 : les
+     marges de la zone. Sans cette réserve, une barre horizontale apparaît pour
+     une quinzaine de pixels. */
+  var fixed = 120 + W2 + 62 + 54 + 96 + (hasQty() ? 104 : 0) + 48;
+  grid.style.setProperty("--ncols", S.cols.length);
+  grid.style.setProperty("--fixedw", (fixed + 32) + "px");
+  /* la disposition horizontale des contrôles, elle, a besoin d'une mesure */
+  var w = Math.max(200, Math.min(560, Math.floor((wrap.clientWidth - 32 - fixed) / S.cols.length)));
+  grid.classList.toggle("wide", w >= 400);
 }
 
 function drawBar(c){
@@ -803,6 +878,10 @@ function refresh(skip){
   var parts = Object.keys(byStart).map(function(k){ return byStart[k] + " × " + k; }).join(" + ");
   var noQty = S.rows.filter(function(r){ return qtyOf(r) === null; }).length;
 
+  if(S.rows.length === 0 && S.cols.length === 0){
+    document.getElementById("checks").innerHTML = "";
+    return;
+  }
   document.getElementById("checks").innerHTML =
       '<div class="chkcard info"><h3>Matière engagée</h3><div class="st">' + IC.sheet
     + f2(F.T/100) + " feuille" + (F.T>100?"s":"") + " de " + S.std.len + "×" + S.std.wid + '</div><p>'
@@ -1681,7 +1760,24 @@ document.getElementById("demo").onclick = function(){
   render();
 };
 
-addRow(null,true); addRow(null,true); addCol(); addCol();
+/* ---- écran de départ ---- */
+document.getElementById("eico").innerHTML = ico('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/>'
+  + '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>', 46);
+document.getElementById("e1").innerHTML = IC.imp + "Importer un plan (PDF)";
+document.getElementById("e1").onclick = function(){ document.getElementById("openpdf").click(); };
+document.getElementById("e2").innerHTML = IC.imp + "Importer des jobs";
+document.getElementById("e2").onclick = function(){ document.getElementById("openimp").click(); };
+document.getElementById("e3").onclick = function(){ addRow(); addCol(); };
+
+/* ResizeObserver plutôt que l'événement resize : il réagit aussi quand la zone
+   change sans que la fenêtre bouge (zoom, panneau latéral, barre de défilement). */
+(function(){
+  var relayout = function(){ fitPieceCol(); fitColumns(); };
+  if(window.ResizeObserver) new ResizeObserver(relayout).observe(document.getElementById("wrap"));
+  window.addEventListener("resize", relayout);
+})();
+
+render();   /* on démarre sur un tableau vide */
 </script>
 </body>
 </html>

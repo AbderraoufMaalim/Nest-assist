@@ -94,6 +94,7 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 1
   font-size:12px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px}
 .ghost:hover{border-color:var(--line-strong);color:var(--ink)}
 .ghost.ico{padding:7px 8px}
+a.ghost{text-decoration:none}
 .prim{background:var(--exact);color:#fff;border-radius:7px;padding:7px 14px;font-size:12.5px;
   font-weight:600;display:inline-flex;align-items:center;gap:6px}
 .prim:hover{background:var(--prim-hover)}
@@ -341,6 +342,7 @@ table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
   <label class="tog" title="Épingler automatiquement une valeur dès qu'on la glisse">
     <input type="checkbox" id="autopin">Épinglage auto</label>
   <div class="spacer"></div>
+  <a class="ghost" id="tofrais" href="fraisage.html" title="Calculateur de fraisage (countersink)">Fraisage</a>
   <button class="ghost ico" id="theme" title="Thème"></button>
   <button class="prim" id="openpdf"></button>
   <button class="ghost" id="openimp"></button>
@@ -432,7 +434,8 @@ var IC = {
   copy : ico('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', 12),
   moon : ico('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/>', 14),
   sun  : ico('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>', 14),
-  trash2: ico('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>', 12)
+  trash2: ico('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>', 12),
+  cone : ico('<path d="m20.9 18.55-8-15.98a1 1 0 0 0-1.8 0l-8 15.98"/><ellipse cx="12" cy="19" rx="9" ry="3"/>', 13)
 };
 /* Une couleur par job, la même partout : pastille, glissière, segment.
    Sur fond sombre les teintes profondes disparaissent, d'où deux jeux —
@@ -1648,6 +1651,7 @@ document.addEventListener("keydown", function(e){
   }
 })();
 
+document.getElementById("tofrais").innerHTML = IC.cone + "Fraisage";
 document.getElementById("addrow").innerHTML = IC.plus + "Ajouter un job";
 document.getElementById("addrow").onclick = function(){ addRow(); };
 document.getElementById("openimp").innerHTML = IC.imp + "Importer des jobs";

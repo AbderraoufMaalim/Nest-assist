@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fraisage — calcul de cône</title>
+<style>
+:root{
+  --bg:#eef0f4; --panel:#fff; --panel-2:#fafbfc; --field:#fff; --hover:#fcfdfe;
+  --line:#dde1e7; --line-strong:#a8b0ba; --line-soft:#f0f2f5; --ghost:#ccd2d8;
+  --ink:#111720; --ink-soft:#5a6674; --ink-faint:#6b7580;
+  --exact:#1f4fd8; --exact-bg:#eef2ff; --exact-line:#c9d5ff;
+  --exact-hover:#dde5ff; --exact-dim:#ccd4e8; --prim-hover:#1740b8;
+  --ok:#0d7a3e; --ok-bg:#e6f6ec;
+  --bad:#b3261e; --bad-bg:#fdecea;
+  --warn:#8a5300; --warn-bg:#fff3df; --warn-accent:#d99a1e;
+  --result:#0d2b52; --result-bg:#e7eef7; --result-line:#cddaea;
+  --pin:#b06a00; --pin-bg:#fff2dc; --pin-line:#f0d9a8; --pin-flash:#f0a500;
+  --track:#dfe4ea; --bar-bg:#eef0f3; --bar-line:#dfe3e8;
+  --focus:#f0c000; --focus-bg:#fffceb;
+  color-scheme:light;
+}
+/* Même logique de thème que Nest Assist : "auto" suit le système, et le bouton
+   force l'un ou l'autre — d'où la garde :not([data-theme="light"]). La clé de
+   stockage est partagée entre les deux pages, le thème suit la navigation. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1319; --panel:#171c24; --panel-2:#1c222b; --field:#1f262f; --hover:#1b212a;
+    --line:#2b333e; --line-strong:#4a5563; --line-soft:#232a34; --ghost:#4d5765;
+    --ink:#e8ecf1; --ink-soft:#a3aebb; --ink-faint:#8b98a6;
+    --exact:#7aa2ff; --exact-bg:#1b2438; --exact-line:#33436b;
+    --exact-hover:#243352; --exact-dim:#33436b; --prim-hover:#5b86e8;
+    --ok:#4ade80; --ok-bg:#132a1e;
+    --bad:#f87171; --bad-bg:#2e1618;
+    --warn:#e0a53a; --warn-bg:#2c2113; --warn-accent:#e0a53a;
+    --result:#9ec5f5; --result-bg:#1a2331; --result-line:#2e3f56;
+    --pin:#e0a53a; --pin-bg:#2c2113; --pin-line:#4a3a1c; --pin-flash:#f0a500;
+    --track:#2f3947; --bar-bg:#1b212a; --bar-line:#2b333e;
+    --focus:#d4a017; --focus-bg:#2a2413;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1319; --panel:#171c24; --panel-2:#1c222b; --field:#1f262f; --hover:#1b212a;
+  --line:#2b333e; --line-strong:#4a5563; --line-soft:#232a34; --ghost:#4d5765;
+  --ink:#e8ecf1; --ink-soft:#a3aebb; --ink-faint:#8b98a6;
+  --exact:#7aa2ff; --exact-bg:#1b2438; --exact-line:#33436b;
+  --exact-hover:#243352; --exact-dim:#33436b; --prim-hover:#5b86e8;
+  --ok:#4ade80; --ok-bg:#132a1e;
+  --bad:#f87171; --bad-bg:#2e1618;
+  --warn:#e0a53a; --warn-bg:#2c2113; --warn-accent:#e0a53a;
+  --result:#9ec5f5; --result-bg:#1a2331; --result-line:#2e3f56;
+  --pin:#e0a53a; --pin-bg:#2c2113; --pin-line:#4a3a1c; --pin-flash:#f0a500;
+  --track:#2f3947; --bar-bg:#1b212a; --bar-line:#2b333e;
+  --focus:#d4a017; --focus-bg:#2a2413;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit;
+  transition:background .13s,color .13s,border-color .13s,opacity .13s}
+button:active:not(:disabled){transform:translateY(.5px)}
+input,select{font:inherit;color:inherit}
+svg{display:block}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.mono{font-family:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono",Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums}
+
+/* ---------- en-tête ---------- */
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 16px;
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:0 0 auto;z-index:60;
+  box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.brand{font-weight:700;font-size:15px;letter-spacing:-.2px;line-height:1.15}
+.brand small{display:block;font-weight:400;font-size:10.5px;color:var(--ink-faint);letter-spacing:.2px}
+.spacer{flex:1}
+.ghost{background:var(--field);border:1px solid var(--line);border-radius:7px;padding:6px 11px;
+  font-size:12px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;
+  text-decoration:none}
+.ghost:hover{border-color:var(--line-strong);color:var(--ink)}
+.ghost.ico{padding:7px 8px}
+.back{padding:6px 10px 6px 8px}
+
+/* bascule d'unités */
+.units{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;
+  background:var(--field)}
+.units button{padding:6px 12px;font-size:12px;color:var(--ink-soft)}
+.units button+button{border-left:1px solid var(--line)}
+.units button.on{background:var(--exact-bg);color:var(--exact);font-weight:600}
+.units button:not(.on):hover{background:var(--hover);color:var(--ink)}
+
+/* ---------- ossature ---------- */
+.wrap{flex:1 1 auto;overflow:auto;padding:16px}
+.layout{max-width:1280px;margin:0 auto;display:grid;gap:16px;
+  grid-template-columns:minmax(360px,440px) minmax(420px,1fr);align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 1px 3px rgba(16,24,40,.05);margin-bottom:14px}
+.card:last-child{margin-bottom:0}
+.chead{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line-soft);
+  font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--ink-faint)}
+.chead .hint{font-weight:400;letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--ink-faint)}
+.cbody{padding:12px 14px}
+
+/* ---------- lignes de mesure ---------- */
+.row{display:grid;grid-template-columns:26px 1fr 128px 30px;align-items:center;gap:8px;
+  padding:5px 4px;border-radius:8px}
+.row+.row{margin-top:2px}
+.row:hover{background:var(--hover)}
+.row.target{background:var(--result-bg)}
+.row.derived{background:transparent}
+.dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid var(--line);background:var(--field);color:var(--ghost);padding:0}
+.dot:hover{border-color:var(--exact);color:var(--exact)}
+.row.target .dot{background:var(--exact);border-color:var(--exact);color:#fff}
+.dot.off{visibility:hidden}
+.lab{font-size:13px;color:var(--ink-soft);display:flex;align-items:baseline;gap:6px;min-width:0}
+.lab b{color:var(--ink);font-weight:600}
+.lab .sym{font-size:11px;color:var(--ink-faint)}
+.row.target .lab b{color:var(--result)}
+.val{width:100%;border:1px solid var(--line);border-radius:7px;padding:6px 8px;text-align:right;
+  background:var(--field);outline:none;font-size:13.5px}
+.val:focus{border-color:var(--exact);box-shadow:0 0 0 3px var(--exact-bg)}
+.val.bad{border-color:var(--bad);background:var(--bad-bg)}
+.row.target .val{background:var(--result-bg);border-color:var(--result-line);color:var(--result);
+  font-weight:700;cursor:default}
+.row.derived .val{background:var(--panel-2);border-style:dashed;color:var(--ink-soft);cursor:default}
+.unit{font-size:11.5px;color:var(--ink-faint)}
+
+.sub{margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line-soft);
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sub .slab{font-size:11px;color:var(--ink-faint);margin-right:2px}
+.chip{border:1px solid var(--line);background:var(--field);border-radius:999px;padding:4px 10px;
+  font-size:12px;color:var(--ink-soft)}
+.chip:hover{border-color:var(--line-strong);color:var(--ink)}
+.chip.on{background:var(--exact-bg);border-color:var(--exact-line);color:var(--exact);font-weight:600}
+select.chip{padding:5px 8px;border-radius:7px;cursor:pointer;background:var(--field)}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:8px;padding:7px 9px}
+.stat .k{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-faint)}
+.stat .v{font-size:14px;font-weight:600;margin-top:2px}
+
+/* ---------- diagnostics ---------- */
+.msg{display:flex;gap:8px;align-items:flex-start;border-radius:8px;padding:8px 10px;font-size:12.5px;
+  line-height:1.4}
+.msg+.msg{margin-top:6px}
+.msg.err{background:var(--bad-bg);color:var(--bad)}
+.msg.warn{background:var(--warn-bg);color:var(--warn)}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.info{background:var(--panel-2);color:var(--ink-soft);border:1px solid var(--line-soft)}
+.msg svg{flex:0 0 auto;margin-top:1px}
+.msg .act{margin-left:auto;border:1px solid currentColor;border-radius:6px;padding:2px 8px;
+  font-size:11.5px;opacity:.85;white-space:nowrap}
+.msg .act:hover{opacity:1}
+
+/* ---------- forets ---------- */
+.drill{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;width:100%;
+  padding:7px 9px;border-radius:8px;border:1px solid transparent;text-align:left}
+.drill:hover{background:var(--hover);border-color:var(--line)}
+.drill+.drill{margin-top:2px}
+.drill.best{background:var(--exact-bg);border-color:var(--exact-line)}
+.drill .nm{font-size:13px;font-weight:600}
+.drill .set{font-size:10.5px;color:var(--ink-faint);font-weight:400;margin-left:6px}
+.drill .dia{font-size:12.5px;color:var(--ink-soft)}
+.drill .dev{font-size:11.5px;min-width:74px;text-align:right}
+.dev.plus{color:var(--ok)} .dev.minus{color:var(--bad)} .dev.zero{color:var(--ink-faint)}
+
+/* ---------- vue en coupe ---------- */
+.view{position:sticky;top:0}
+.viewcard{padding:6px 6px 0}
+.viewcard svg.scene{width:100%;height:auto;max-height:calc(100vh - 230px)}
+.res{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:11px 14px;
+  border-top:1px solid var(--line-soft);background:var(--result-bg);
+  border-radius:0 0 9px 9px;margin:6px -6px 0}
+.res .k{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-faint)}
+.res .v{font-size:22px;font-weight:700;color:var(--result);letter-spacing:-.4px}
+.res .alt{font-size:13px;color:var(--ink-soft)}
+.res .tag{margin-left:auto;font-size:12px;color:var(--result);border:1px solid var(--result-line);
+  border-radius:999px;padding:3px 10px;background:var(--panel)}
+.res.bad{background:var(--bad-bg)}
+.res.bad .v{color:var(--bad);font-size:16px}
+
+.foot{max-width:1280px;margin:14px auto 0;font-size:11.5px;color:var(--ink-faint);
+  display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.foot code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--panel);
+  border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink-soft)}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr}
+  .view{order:-1;position:sticky;top:-16px;z-index:5;background:var(--bg);
+    padding:8px 0;margin:-8px 0}
+  .viewcard svg.scene{max-height:34vh}
+  .wrap{padding:12px}
+  header{padding:8px 12px;gap:8px}
+  .brand small{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a class="ghost back" href="index.html" title="Retour à Nest Assist" id="back"></a>
+  <div class="brand">Fraisage<small>CÔNE DE FRAISURE · TÔLE MINCE</small></div>
+  <div class="spacer"></div>
+  <div class="units" role="group" aria-label="Unité d'affichage">
+    <button id="uin" class="on">pouces</button><button id="umm">mm</button>
+  </div>
+  <button class="ghost" id="ex">Exemple</button>
+  <button class="ghost" id="copy"></button>
+  <button class="ghost ico" id="theme" title="Thème"></button>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+  <section>
+    <div class="card">
+      <div class="chead">Mesures <span class="spacer"></span>
+        <span class="hint">le point <b>&#9678;</b> marque la valeur à calculer</span></div>
+      <div class="cbody">
+
+        <div class="row" id="r_t">
+          <button class="dot off" tabindex="-1" aria-hidden="true"></button>
+          <span class="lab"><b>Épaisseur</b><span class="sym">t</span></span>
+          <input class="val mono" id="v_t" inputmode="decimal" autocomplete="off">
+          <span class="unit" data-u>&Prime;</span>
+        </div>
+
+        <div class="row" id="r_D">
+          <button class="dot" data-k="D" title="Calculer le Ø extérieur"></button>
+          <span class="lab"><b>Ø extérieur</b><span class="sym">en surface</span></span>
+          <input class="val mono" id="v_D" inputmode="decimal" autocomplete="off">
+          <span class="unit" data-u>&Prime;</span>
+        </div>
+
+        <div class="row" id="r_d">
+          <button class="dot" data-k="d" title="Calculer le Ø intérieur"></button>
+          <span class="lab"><b>Ø intérieur</b><span class="sym">trou percé</span></span>
+          <input class="val mono" id="v_d" inputmode="decimal" autocomplete="off">
+          <span class="unit" data-u>&Prime;</span>
+        </div>
+
+        <div class="row" id="r_a">
+          <button class="dot" data-k="a" title="Calculer l'angle inclus"></button>
+          <span class="lab"><b>Angle inclus</b><span class="sym">total, pas demi</span></span>
+          <input class="val mono" id="v_a" inputmode="decimal" autocomplete="off">
+          <span class="unit">&deg;</span>
+        </div>
+
+        <div class="row" id="r_h">
+          <button class="dot" data-k="h" title="Calculer le bord droit restant"></button>
+          <span class="lab"><b>Bord droit</b><span class="sym">paroi sous le cône · h</span></span>
+          <input class="val mono" id="v_h" inputmode="decimal" autocomplete="off">
+          <span class="unit" data-u>&Prime;</span>
+        </div>
+
+        <div class="row derived" id="r_p">
+          <button class="dot off" tabindex="-1" aria-hidden="true"></button>
+          <span class="lab"><b>Profondeur du cône</b><span class="sym">p = t &minus; h</span></span>
+          <input class="val mono" id="v_p" readonly tabindex="-1">
+          <span class="unit" data-u>&Prime;</span>
+        </div>
+
+        <div class="sub">
+          <span class="slab">Angle</span>
+          <button class="chip" data-ang="82">82&deg;</button>
+          <button class="chip" data-ang="90">90&deg;</button>
+          <button class="chip" data-ang="100">100&deg;</button>
+          <button class="chip" data-ang="110">110&deg;</button>
+          <button class="chip" data-ang="120">120&deg;</button>
+        </div>
+        <div class="sub">
+          <span class="slab">Épaisseur</span>
+          <select class="chip" id="gauge">
+            <option value="">jauge…</option>
+          </select>
+          <button class="chip" id="full" title="Le fraisage descend jusqu'au fond : h = 0">Pleine profondeur</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="k">Profondeur</div><div class="v mono" id="s_p">—</div></div>
+          <div class="stat"><div class="k">% épaisseur</div><div class="v mono" id="s_pct">—</div></div>
+          <div class="stat"><div class="k">Chanfrein radial</div><div class="v mono" id="s_rad">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="diagcard">
+      <div class="chead">Diagnostic</div>
+      <div class="cbody" id="diag"></div>
+    </div>
+
+    <div class="card">
+      <div class="chead">Forets les plus proches
+        <span class="spacer"></span><span class="hint" id="drillhint"></span></div>
+      <div class="cbody" id="drills"></div>
+    </div>
+  </section>
+
+  <section class="view">
+    <div class="card viewcard">
+      <div id="scene"></div>
+      <div class="res" id="res"></div>
+    </div>
+  </section>
+
+</div>
+<div class="foot">
+  <span>Relation&nbsp;:</span>
+  <code>Ø ext = Ø int + 2 &middot; p &middot; tan(&theta;/2)</code>
+  <span>où <b>p = t &minus; h</b> — le cône ne descend pas toujours jusqu'au fond.</span>
+</div>
+</div>
+
+<script>
+"use strict";
+
+/* Icônes : tracés Lucide (MIT), intégrés — même parti pris que Nest Assist,
+   le fichier reste autonome. */
+function ico(d, n){
+  return '<svg viewBox="0 0 24 24" width="'+(n||14)+'" height="'+(n||14)+'" fill="none" '
+    + 'stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
+    + d + '</svg>';
+}
+var IC = {
+  back : ico('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>', 14),
+  copy : ico('<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>', 12),
+  check: ico('<path d="M20 6 9 17l-5-5"/>', 12),
+  moon : ico('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9"/>', 14),
+  sun  : ico('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>', 14),
+  target: ico('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', 13),
+  alert: ico('<path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="9"/>', 13),
+  info : ico('<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>', 13),
+  ok   : ico('<circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/>', 13)
+};
+
+/* ---------------- thème clair / sombre (clé partagée avec Nest Assist) ------- */
+var THEME_KEY = "nestassist.theme";
+function systemDark(){
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme:dark)").matches;
+}
+function isDark(){
+  var t = document.documentElement.getAttribute("data-theme");
+  return t ? t === "dark" : systemDark();
+}
+function applyTheme(t){
+  if(t) document.documentElement.setAttribute("data-theme", t);
+  else  document.documentElement.removeAttribute("data-theme");
+  var b = document.getElementById("theme");
+  b.innerHTML = isDark() ? IC.sun : IC.moon;
+  b.title = isDark() ? "Passer en clair" : "Passer en sombre";
+}
+
+/* =============== état ===============
+   Tout est stocké en pouces ; l'unité n'est qu'un habillage d'affichage.
+   `unknown` désigne la valeur calculée — les quatre autres sont des mesures.
+   L'épaisseur est toujours une entrée : c'est la seule qu'on connaît d'avance. */
+var S = { t:0.064, D:0.332, d:0.2207, a:82, h:0, unknown:"d", unit:"in" };
+var KEY = "nestassist.fraisage";
+var MM = 25.4;
+var STD_ANGLES = [82, 90, 100, 110, 120];
+var NAMES = { t:"Épaisseur", D:"Ø extérieur", d:"Ø intérieur", a:"Angle inclus",
+              h:"Bord droit", p:"Profondeur du cône" };
+
+function rad(x){ return x * Math.PI / 180; }
+function deg(x){ return x * 180 / Math.PI; }
+
+/* ---------------- lecture / écriture des nombres ----------------
+   Usage québécois : la virgule décimale passe. Les fractions tapées
+   directement aussi (« 15/64 », « 1 3/8 ») — et une fraction est toujours
+   en pouces, même quand l'affichage est en mm. */
+function parseLen(str){
+  if(str == null) return NaN;
+  var s = String(str).trim().toLowerCase();
+  if(!s) return NaN;
+  var forced = null;
+  if(/mm$/.test(s)){ forced = "mm"; s = s.replace(/mm$/, "").trim(); }
+  else if(/(''|"|″|po|in)$/.test(s)){ forced = "in"; s = s.replace(/(''|"|″|po|in)$/, "").trim(); }
+  s = s.replace(/,/g, ".").replace(/\s+/g, " ");
+  var m, val = NaN, frac = false;
+  if((m = s.match(/^(\d+)\s+(\d+)\/(\d+)$/)))      { val = (+m[1]) + (+m[2])/(+m[3]); frac = true; }
+  else if((m = s.match(/^(\d+)\/(\d+)$/)))         { val = (+m[1])/(+m[2]);           frac = true; }
+  else if(/^\d*\.?\d+$/.test(s))                   { val = parseFloat(s); }
+  else return NaN;
+  if(!isFinite(val)) return NaN;
+  var u = forced || (frac ? "in" : S.unit);
+  return u === "mm" ? val / MM : val;
+}
+function trimZeros(s){
+  if(s.indexOf(".") < 0) return s;
+  return s.replace(/0+$/, "").replace(/\.$/, "");
+}
+function fr(s){ return s.replace(".", ","); }
+/* longueur interne (pouces) -> texte dans l'unité courante */
+function fmtLen(v){
+  if(!isFinite(v)) return "—";
+  return fr(trimZeros(S.unit === "mm" ? (v*MM).toFixed(3) : v.toFixed(4)));
+}
+function fmtLenU(v){ return fmtLen(v) + (S.unit === "mm" ? " mm" : "″"); }
+function fmtAng(v){ return isFinite(v) ? fr(trimZeros(v.toFixed(2))) : "—"; }
+function unitLabel(){ return S.unit === "mm" ? "mm" : "″"; }
+
+/* ---------------- résolution ----------------
+   Une seule relation, quatre sens de lecture. p n'est jamais saisi :
+   soit il vient de t − h, soit c'est lui qu'on déduit pour trouver h. */
+function solve(){
+  var t = S.t, D = S.D, d = S.d, a = S.a, h = S.h, p;
+  if(S.unknown === "h"){
+    var tn = Math.tan(rad(a)/2);
+    p = (D - d) / (2 * tn);
+    h = t - p;
+  }else{
+    p = t - h;
+    if(S.unknown === "D")      D = d + 2 * p * Math.tan(rad(a)/2);
+    else if(S.unknown === "d") d = D - 2 * p * Math.tan(rad(a)/2);
+    else if(S.unknown === "a") a = 2 * deg(Math.atan2((D - d)/2, p));
+  }
+  return { t:t, D:D, d:d, a:a, h:h, p:p };
+}
+
+/* ---------------- forets ----------------
+   Numérotés #1–#60, lettres A–Z, fractions au 64e, métriques 1,0–13,0 mm. */
+var NUM_DRILL = [.2280,.2210,.2130,.2090,.2055,.2040,.2010,.1990,.1960,.1935,
+                 .1910,.1890,.1850,.1820,.1800,.1770,.1730,.1695,.1660,.1610,
+                 .1590,.1570,.1540,.1520,.1495,.1470,.1440,.1405,.1360,.1285,
+                 .1200,.1160,.1130,.1110,.1100,.1065,.1040,.1015,.0995,.0980,
+                 .0960,.0935,.0890,.0860,.0820,.0810,.0785,.0760,.0730,.0700,
+                 .0670,.0635,.0595,.0550,.0520,.0465,.0430,.0420,.0410,.0400];
+var LET_DRILL = [.234,.238,.242,.246,.250,.257,.261,.266,.272,.277,.281,.290,.295,
+                 .302,.316,.323,.332,.339,.348,.358,.368,.377,.386,.397,.404,.413];
+var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function gcd(a,b){ return b ? gcd(b, a % b) : a; }
+var DRILLS = (function(){
+  var out = [], i;
+  for(i = 0; i < NUM_DRILL.length; i++) out.push({ n:"#"+(i+1), d:NUM_DRILL[i], s:"numéroté" });
+  for(i = 0; i < LET_DRILL.length; i++) out.push({ n:LETTERS.charAt(i), d:LET_DRILL[i], s:"lettre" });
+  for(i = 1; i <= 64; i++){
+    var g = gcd(i, 64);
+    out.push({ n:(i/g) + "/" + (64/g) + "″", d:i/64, s:"fraction" });
+  }
+  for(i = 10; i <= 130; i++) out.push({ n:fr((i/10).toFixed(1)) + " mm", d:(i/10)/MM, s:"métrique" });
+  return out;
+})();
+/* Le meilleur foret de chaque jeu, plutôt que les quatre plus proches : les
+   métriques vont au 0,1 mm et rafleraient les quatre lignes, en cachant
+   justement le foret numéroté que l'atelier a dans le tiroir. */
+var FAMILIES = ["numéroté", "lettre", "fraction", "métrique"];
+function bestOf(family, target){
+  var best = null, bd = 1e9;
+  for(var i = 0; i < DRILLS.length; i++){
+    if(DRILLS[i].s !== family) continue;
+    var dd = Math.abs(DRILLS[i].d - target);
+    if(dd < bd){ bd = dd; best = DRILLS[i]; }
+  }
+  return best;
+}
+function nearestDrills(target){
+  if(!isFinite(target) || target <= 0) return [];
+  var out = [];
+  for(var i = 0; i < FAMILIES.length; i++){
+    var b = bestOf(FAMILIES[i], target);
+    if(b) out.push(b);
+  }
+  out.sort(function(x, y){ return Math.abs(x.d - target) - Math.abs(y.d - target); });
+  /* un jeu qui tombe à plus de 0,02″ n'a rien à proposer — on le coupe,
+     tant qu'il reste de quoi comparer */
+  while(out.length > 2 && Math.abs(out[out.length-1].d - target) > 0.02) out.pop();
+  return out;
+}
+/* Pour l'étiquette du résultat : on reste dans le système d'unités affiché,
+   sinon un 5,6 mm vient voler la vedette au #2. */
+function tagDrill(target){
+  if(!isFinite(target) || target <= 0) return null;
+  if(S.unit === "mm") return bestOf("métrique", target);
+  var c = [bestOf("numéroté", target), bestOf("lettre", target), bestOf("fraction", target)];
+  var best = null, bd = 1e9;
+  for(var i = 0; i < c.length; i++){
+    if(!c[i]) continue;
+    var dd = Math.abs(c[i].d - target);
+    if(dd < bd){ bd = dd; best = c[i]; }
+  }
+  return best;
+}
+
+/* ---------------- jauges de tôle ----------------
+   De quoi éviter la table papier ; le nom du matériau est affiché parce que
+   la même jauge ne donne pas la même épaisseur d'un matériau à l'autre. */
+var GAUGES = [
+  ["Acier (MSG)",      [[7,.1793],[8,.1644],[9,.1495],[10,.1345],[11,.1196],[12,.1046],
+                        [13,.0897],[14,.0747],[16,.0598],[18,.0478],[20,.0359],[22,.0299],
+                        [24,.0239],[26,.0179]]],
+  ["Inox",             [[10,.1406],[11,.1250],[12,.1094],[14,.0781],[16,.0625],[18,.0500],
+                        [20,.0375],[22,.0313],[24,.0250],[26,.0188]]],
+  ["Aluminium (B&S)",  [[8,.1285],[10,.1019],[11,.0907],[12,.0808],[14,.0641],[16,.0508],
+                        [18,.0403],[20,.0320],[22,.0253]]]
+];
+(function fillGauges(){
+  var sel = document.getElementById("gauge");
+  for(var i = 0; i < GAUGES.length; i++){
+    var og = document.createElement("optgroup");
+    og.label = GAUGES[i][0];
+    for(var j = 0; j < GAUGES[i][1].length; j++){
+      var g = GAUGES[i][1][j], o = document.createElement("option");
+      o.value = g[1];
+      o.textContent = g[0] + " ga — " + fr(g[1].toFixed(4)) + "″";
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+})();
+
+/* =============== vue en coupe ===============
+   SVG regénéré à chaque rafraîchissement. Les couleurs sont des variables CSS,
+   donc le dessin suit le thème sans être redessiné. */
+var VB_W = 780, VB_H = 480, ML = 96, MR = 84, MT = 54, MB = 66;
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function n2(x){ return Math.round(x * 100) / 100; }
+
+function txt(x, y, s, o){
+  o = o || {};
+  return '<text x="' + n2(x) + '" y="' + n2(y) + '" text-anchor="' + (o.anchor || "middle") + '"'
+    + ' font-size="' + (o.size || 12.5) + '" fill="' + (o.fill || "var(--ink-soft)") + '"'
+    + (o.weight ? ' font-weight="' + o.weight + '"' : '')
+    + ' font-family="ui-monospace, Menlo, Consolas, monospace"'
+    + (o.rot ? ' transform="rotate(' + o.rot + ' ' + n2(x) + ' ' + n2(y) + ')"' : '')
+    + '>' + esc(s) + '</text>';
+}
+function line(x1, y1, x2, y2, o){
+  o = o || {};
+  return '<line x1="' + n2(x1) + '" y1="' + n2(y1) + '" x2="' + n2(x2) + '" y2="' + n2(y2) + '"'
+    + ' stroke="' + (o.stroke || "var(--ink-soft)") + '" stroke-width="' + (o.w || 1) + '"'
+    + (o.dash ? ' stroke-dasharray="' + o.dash + '"' : '')
+    + (o.cap ? ' stroke-linecap="' + o.cap + '"' : '')
+    + (o.marker ? ' marker-start="url(#' + o.marker + ')" marker-end="url(#' + o.marker + ')"' : '')
+    + '/>';
+}
+/* cote horizontale : ligne cotée + lignes d'attache depuis la géométrie */
+function dimH(x1, x2, y, from1, from2, label, hot){
+  var col = hot ? "var(--exact)" : "var(--ink-soft)";
+  var mk  = hot ? "arh" : "ar";
+  var up  = y < from1;
+  var s = line(x1, from1, x1, y + (up ? -6 : 6), { stroke:"var(--line-strong)", w:.8, dash:"3 3" })
+        + line(x2, from2, x2, y + (up ? -6 : 6), { stroke:"var(--line-strong)", w:.8, dash:"3 3" })
+        + line(x1, y, x2, y, { stroke:col, w:hot ? 1.5 : 1.1, marker:mk });
+  return s + txt((x1 + x2)/2, y + (up ? -7 : 15), label,
+    { fill:col, weight:hot ? "700" : "500", size:13 });
+}
+/* cote verticale : `side` -1 à gauche du trait, +1 à droite */
+function dimV(y1, y2, x, fromX1, fromX2, label, hot, side){
+  var col = hot ? "var(--exact)" : "var(--ink-soft)";
+  var mk  = hot ? "arh" : "ar";
+  var s = line(fromX1, y1, x - side * 6, y1, { stroke:"var(--line-strong)", w:.8, dash:"3 3" })
+        + line(fromX2, y2, x - side * 6, y2, { stroke:"var(--line-strong)", w:.8, dash:"3 3" })
+        + line(x, y1, x, y2, { stroke:col, w:hot ? 1.5 : 1.1, marker:mk });
+  return s + txt(x + side * 6, (y1 + y2)/2, label,
+    { fill:col, weight:hot ? "700" : "500", size:13, rot:-90 });
+}
+
+function scene(v, valid){
+  var t = v.t, D = v.D, d = v.d, a = v.a, p = v.p, h = v.h;
+  var availW = VB_W - ML - MR, availH = VB_H - MT - MB;
+  var tn = Math.tan(rad(a)/2);
+  var apexDepth = (D/2) / tn;                       /* surface -> apex virtuel */
+  /* La tôle déborde du fraisage, sinon on ne voit pas qu'il y a de la matière. */
+  var half = Math.max(D/2 * 1.75, D/2 + t * 1.5, d/2 + t * 2.2);
+  /* L'apex entre dans le calcul de hauteur : c'est lui qui sort du cadre. */
+  var totH = Math.max(t * 1.12, Math.min(apexDepth * 1.05, t * 12));
+  var s = Math.min(availW / (2 * half), availH / totH);
+
+  var cx = ML + availW/2, yT = MT, yB = yT + t * s;
+  var yCone = yT + p * s;
+  var yA = yT + apexDepth * s;
+  var xL = cx - half * s, xR = cx + half * s;
+  var rD = D/2 * s, rd = d/2 * s;
+  var bottom = Math.max(yB, Math.min(yA, yT + totH * s));
+
+  var g = '';
+  /* --- matière : deux blocs hachurés à 45°, séparés par le trou --- */
+  var right = "M " + n2(cx+rd) + " " + n2(yB) + " L " + n2(cx+rd) + " " + n2(yCone)
+            + " L " + n2(cx+rD) + " " + n2(yT) + " L " + n2(xR) + " " + n2(yT)
+            + " L " + n2(xR) + " " + n2(yB) + " Z";
+  var left  = "M " + n2(cx-rd) + " " + n2(yB) + " L " + n2(cx-rd) + " " + n2(yCone)
+            + " L " + n2(cx-rD) + " " + n2(yT) + " L " + n2(xL) + " " + n2(yT)
+            + " L " + n2(xL) + " " + n2(yB) + " Z";
+  g += '<path d="' + right + '" fill="var(--panel-2)"/><path d="' + right + '" fill="url(#hx)"/>';
+  g += '<path d="' + left  + '" fill="var(--panel-2)"/><path d="' + left  + '" fill="url(#hx)"/>';
+  g += '<path d="' + right + '" fill="none" stroke="var(--ink)" stroke-width="1.7" stroke-linejoin="round"/>';
+  g += '<path d="' + left  + '" fill="none" stroke="var(--ink)" stroke-width="1.7" stroke-linejoin="round"/>';
+
+  /* --- axe de symétrie, trait d'axe --- */
+  g += line(cx, yT - 30, cx, bottom + 30,
+        { stroke:"var(--ink-faint)", w:.9, dash:"12 4 2.5 4" });
+
+  /* --- prolongement du cône jusqu'à l'apex virtuel ---
+     C'est ce qui rend visible pourquoi un 82° creuse plus qu'un 100°. */
+  if(yA > yCone + 2){
+    var clipA = Math.min(yA, bottom + 26);
+    var fr_ = (clipA - yCone) / (yA - yCone);
+    g += line(cx+rd, yCone, cx + rd*(1-fr_), clipA, { stroke:"var(--warn-accent)", w:1.3, dash:"6 4" });
+    g += line(cx-rd, yCone, cx - rd*(1-fr_), clipA, { stroke:"var(--warn-accent)", w:1.3, dash:"6 4" });
+  }
+
+  /* --- arc et étiquette d'angle, à l'apex --- */
+  var L = Math.sqrt(rD*rD + (yA - yT)*(yA - yT));
+  if(L > 8 && yA <= bottom + 26){
+    var r = Math.min(54, L * 0.5);
+    var ux = rD / L, uy = -(yA - yT) / L;
+    var p1x = cx + r*ux, p1y = yA + r*uy, p2x = cx - r*ux, p2y = yA + r*uy;
+    g += '<path d="M ' + n2(p2x) + ' ' + n2(p2y) + ' A ' + n2(r) + ' ' + n2(r)
+       + ' 0 0 1 ' + n2(p1x) + ' ' + n2(p1y) + '" fill="none" stroke="var(--warn-accent)"'
+       + ' stroke-width="1.2"/>';
+    var aHot = S.unknown === "a";
+    var lbl = fmtAng(a) + "°";
+    var w = lbl.length * 8.2 + 14;
+    g += '<rect x="' + n2(cx - w/2) + '" y="' + n2(yA + 3) + '" width="' + n2(w) + '" height="21"'
+       + ' rx="6" fill="var(--panel)" stroke="' + (aHot ? "var(--exact)" : "var(--warn-accent)")
+       + '" stroke-width="' + (aHot ? 1.4 : 1) + '"/>';
+    g += txt(cx, yA + 18, lbl, { fill:aHot ? "var(--exact)" : "var(--warn)", weight:"700", size:13 });
+  }
+
+  /* --- cotes --- */
+  g += dimH(cx - rD, cx + rD, yT - 26, yT, yT, fmtLenU(D), S.unknown === "D");
+  g += dimH(cx - rd, cx + rd, bottom + 34, yCone, yCone, fmtLenU(d), S.unknown === "d");
+  g += dimV(yT, yB, xR + 30, xR, xR, fmtLenU(t), false, 1);
+  if(p * s > 6) g += dimV(yT, yCone, xL - 24, xL, cx - rd, fmtLenU(p), false, -1);
+  if(h * s > 6) g += dimV(yCone, yB, xL - 56, cx - rd, xL, fmtLenU(h), S.unknown === "h", -1);
+  else if(S.unknown === "h")
+    g += txt(xL - 56, (yCone + yB)/2, "h = 0", { fill:"var(--exact)", weight:"700", rot:-90 });
+
+  var defs = '<defs>'
+    + '<pattern id="hx" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+    + '<line x1="0" y1="0" x2="0" y2="7" stroke="var(--ghost)" stroke-width="1"/></pattern>'
+    + '<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"'
+    + ' orient="auto-start-reverse"><path d="M0 1.5 L9 5 L0 8.5 z" fill="var(--ink-soft)"/></marker>'
+    + '<marker id="arh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"'
+    + ' orient="auto-start-reverse"><path d="M0 1.5 L9 5 L0 8.5 z" fill="var(--exact)"/></marker>'
+    + '</defs>';
+
+  /* Le cadre est recalé sur ce qui a réellement été dessiné : selon l'angle,
+     c'est la largeur ou la profondeur de l'apex qui commande, et le reste
+     serait du vide. */
+  var x0 = xL - 78, x1 = xR + 52, y0 = yT - 52, y1 = bottom + 58;
+  return '<svg class="scene" viewBox="' + n2(x0) + ' ' + n2(y0) + ' '
+    + n2(x1 - x0) + ' ' + n2(y1 - y0) + '" '
+    + 'preserveAspectRatio="xMidYMid meet" role="img" '
+    + 'aria-label="Vue en coupe du fraisage">' + defs + g + '</svg>';
+}
+
+/* =============== rendu =============== */
+var FIELDS = { t:"v_t", D:"v_D", d:"v_d", a:"v_a", h:"v_h" };
+var lastText = "";
+
+function render(){
+  var v = solve();
+  var errs = [], notes = [];
+
+  /* --- contrôles de géométrie --- */
+  if(!isFinite(v.t) || v.t <= 0) errs.push("L'épaisseur doit être supérieure à 0.");
+  if(!isFinite(v.a) || v.a <= 0 || v.a >= 180) errs.push("Angle inclus hors bornes : il doit rester entre 0° et 180°.");
+  if(S.unknown === "a" && v.p <= 0) errs.push("Profondeur de cône nulle ou négative : l'angle n'est pas défini.");
+  if(v.p < -1e-9) errs.push("Bord droit plus grand que l'épaisseur : la profondeur du cône serait négative.");
+  else if(v.p > v.t + 1e-9) errs.push("Le cône est plus profond que la tôle (" + fmtLenU(v.p) + " pour " + fmtLenU(v.t) + ").");
+  if(isFinite(v.d) && v.d <= 0) errs.push("Ø intérieur nul ou négatif : le cône mange toute la matière avant le trou.");
+  if(isFinite(v.D) && isFinite(v.d) && v.D <= v.d) errs.push("Ø extérieur inférieur ou égal au Ø intérieur.");
+  var ok = errs.length === 0 && isFinite(v.D) && isFinite(v.d) && isFinite(v.a) && isFinite(v.h);
+
+  /* --- champs --- */
+  for(var k in FIELDS){
+    if(!FIELDS.hasOwnProperty(k)) continue;
+    var el = document.getElementById(FIELDS[k]);
+    var row = document.getElementById("r_" + k);
+    var isT = (k === S.unknown);
+    if(row) row.classList.toggle("target", isT);
+    el.readOnly = isT;
+    el.tabIndex = isT ? -1 : 0;
+    if(document.activeElement !== el){          /* ne jamais réécrire sous les doigts */
+      el.value = (k === "a") ? fmtAng(v.a) : fmtLen(v[k]);
+      el.classList.remove("bad");
+    }
+    /* la valeur calculée est figée dans l'état : changer d'inconnue ne perd rien */
+    if(isT && isFinite(v[k])) S[k] = v[k];
+  }
+  document.getElementById("v_p").value = fmtLen(v.p);
+  var uu = unitLabel();
+  var us = document.querySelectorAll("[data-u]");
+  for(var i = 0; i < us.length; i++) us[i].innerHTML = uu === "mm" ? "mm" : "&Prime;";
+
+  /* --- statistiques --- */
+  document.getElementById("s_p").textContent = ok ? fmtLenU(v.p) : "—";
+  document.getElementById("s_pct").textContent = ok && v.t > 0
+    ? fr((v.p / v.t * 100).toFixed(0)) + " %" : "—";
+  document.getElementById("s_rad").textContent = ok ? fmtLenU((v.D - v.d)/2) : "—";
+
+  /* les présélections montrent ce qui est actuellement en place */
+  var chips = document.querySelectorAll(".chip[data-ang]");
+  for(i = 0; i < chips.length; i++)
+    chips[i].classList.toggle("on", S.unknown !== "a" && Math.abs(+chips[i].getAttribute("data-ang") - v.a) < 5e-3);
+  document.getElementById("full").classList.toggle("on", ok && Math.abs(v.h) < 1e-6);
+
+  /* --- notes --- */
+  var snapTo = null;
+  if(isFinite(v.a) && v.a > 0 && v.a < 180){
+    var best = STD_ANGLES[0], bi = 1e9;
+    for(i = 0; i < STD_ANGLES.length; i++){
+      var dd = Math.abs(STD_ANGLES[i] - v.a);
+      if(dd < bi){ bi = dd; best = STD_ANGLES[i]; }
+    }
+    if(bi < 0.005) notes.push(["ok", "Angle normalisé : " + best + "°.", null]);
+    else{
+      var kind = bi <= 2 ? "warn" : "info";
+      notes.push([kind, "Angle bâtard. Le plus proche des cinq normalisés (82 · 90 · 100 · 110 · 120) "
+        + "est " + best + "°, à " + fr(bi.toFixed(2)) + "° d'ici"
+        + (bi <= 1 ? " — un écart de mesure suffit à l'expliquer." : "."), best]);
+      snapTo = best;
+    }
+  }
+  if(ok && Math.abs(v.h) < 1e-6)
+    notes.push(["info", "Pleine profondeur : le cône débouche exactement au fond, arête vive, aucune paroi droite.", null]);
+  else if(ok && v.h > 0 && v.h < 0.01)
+    notes.push(["warn", "Bord droit de " + fmtLenU(v.h) + " — trop mince pour être tenu en production ; "
+      + "en pratique l'arête va se casser.", null]);
+  if(ok && v.t > 0 && v.p / v.t > 0.9 && v.h > 1e-6)
+    notes.push(["info", "Le cône consomme " + fr((v.p/v.t*100).toFixed(0)) + " % de l'épaisseur.", null]);
+
+  var dg = "";
+  for(i = 0; i < errs.length; i++)
+    dg += '<div class="msg err">' + IC.alert + '<span>' + esc(errs[i]) + '</span></div>';
+  if(errs.length) notes = [];   /* tant que la géométrie est fausse, le reste est du bruit */
+  for(i = 0; i < notes.length; i++){
+    var kk = notes[i][0];
+    dg += '<div class="msg ' + kk + '">'
+       + (kk === "ok" ? IC.ok : kk === "warn" ? IC.alert : IC.info)
+       + '<span>' + esc(notes[i][1]) + '</span>'
+       + (notes[i][2] ? '<button class="act" data-snap="' + notes[i][2] + '">Fixer '
+            + notes[i][2] + '°</button>' : '')
+       + '</div>';
+  }
+  if(!dg) dg = '<div class="msg ok">' + IC.ok + '<span>Géométrie cohérente.</span></div>';
+  document.getElementById("diag").innerHTML = dg;
+
+  /* --- forets --- */
+  var list = ok ? nearestDrills(v.d) : [];
+  var dh = "";
+  for(i = 0; i < list.length; i++){
+    var dr = list[i], dev = dr.d - v.d;
+    var cls = Math.abs(dev) < 5e-5 ? "zero" : dev > 0 ? "plus" : "minus";
+    var sign = Math.abs(dev) < 5e-5 ? "±" : dev > 0 ? "+" : "−";
+    dh += '<button class="drill' + (i === 0 ? " best" : "") + '" data-dia="' + dr.d + '">'
+       + '<span class="nm">' + esc(dr.n) + '<span class="set">' + dr.s + '</span></span>'
+       + '<span class="dia mono">' + fmtLenU(dr.d) + '</span>'
+       + '<span class="dev mono ' + cls + '">' + sign + " " + fmtLen(Math.abs(dev)) + '</span>'
+       + '</button>';
+  }
+  document.getElementById("drills").innerHTML = dh ||
+    '<div class="msg info">' + IC.info + '<span>Aucune suggestion : le Ø intérieur n\'est pas calculable.</span></div>';
+  document.getElementById("drillhint").textContent = S.unknown === "d"
+    ? "clique un foret → il devient la mesure, le Ø ext se recalcule"
+    : "clique un foret pour le prendre comme Ø intérieur";
+
+  /* --- bandeau de résultat --- */
+  var res = document.getElementById("res");
+  if(!ok){
+    res.className = "res bad";
+    res.innerHTML = '<span class="k">Résultat</span><span class="v">Géométrie impossible</span>';
+  }else{
+    var uk = S.unknown, val = v[uk];
+    var main = uk === "a" ? fmtAng(val) + "°" : fmtLenU(val);
+    var alt  = uk === "a"
+      ? "demi-angle " + fmtAng(val/2) + "°"
+      : (S.unit === "mm" ? fr(trimZeros(val.toFixed(4))) + "″"
+                         : fr(trimZeros((val*MM).toFixed(3))) + " mm");
+    var tag = "";
+    if(uk === "d"){
+      var nd = tagDrill(val);
+      if(nd) tag = '<span class="tag">≈ foret ' + esc(nd.n) + '</span>';
+    }
+    res.className = "res";
+    res.innerHTML = '<span class="k">' + NAMES[uk] + '</span>'
+      + '<span class="v mono">' + main + '</span>'
+      + '<span class="alt mono">' + alt + '</span>' + tag;
+  }
+
+  /* --- dessin --- */
+  document.getElementById("scene").innerHTML = ok ? scene(v, true)
+    : '<div style="padding:60px 20px;text-align:center;color:var(--ink-faint);font-size:13px">'
+      + IC.alert + '<div style="margin-top:8px">La coupe n\'est pas dessinable tant que la géométrie est impossible.</div></div>';
+
+  /* --- texte prêt à copier --- */
+  lastText = "Fraisage — " + NAMES[S.unknown] + " calculé\n"
+    + "Épaisseur t      : " + fmtLenU(v.t) + "\n"
+    + "Ø extérieur      : " + fmtLenU(v.D) + "\n"
+    + "Ø intérieur      : " + fmtLenU(v.d) + "\n"
+    + "Angle inclus     : " + fmtAng(v.a) + "°\n"
+    + "Bord droit h     : " + fmtLenU(v.h) + "\n"
+    + "Profondeur p     : " + fmtLenU(v.p) + "\n"
+    + (list.length ? "Foret le plus proche : " + list[0].n + " (" + fmtLenU(list[0].d) + ")\n" : "");
+
+  save();
+}
+
+/* =============== persistance =============== */
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+}
+function load(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(!raw) return;
+    var o = JSON.parse(raw);
+    if(o && typeof o === "object"){
+      ["t","D","d","a","h"].forEach(function(k){
+        if(typeof o[k] === "number" && isFinite(o[k])) S[k] = o[k];
+      });
+      if(["D","d","a","h"].indexOf(o.unknown) >= 0) S.unknown = o.unknown;
+      if(o.unit === "mm" || o.unit === "in") S.unit = o.unit;
+    }
+  }catch(e){}
+}
+
+/* =============== branchements =============== */
+document.getElementById("back").innerHTML = IC.back + "Nest Assist";
+document.getElementById("copy").innerHTML = IC.copy + "Copier les valeurs";
+
+(function(){
+  var saved = null;
+  try{ saved = localStorage.getItem(THEME_KEY); }catch(e){}
+  applyTheme(saved === "dark" || saved === "light" ? saved : null);
+  document.getElementById("theme").onclick = function(){
+    var next = isDark() ? "light" : "dark";
+    try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
+    applyTheme(next);
+  };
+  if(window.matchMedia){
+    var mq = window.matchMedia("(prefers-color-scheme:dark)");
+    var onChange = function(){
+      var s = null;
+      try{ s = localStorage.getItem(THEME_KEY); }catch(e){}
+      if(!s) applyTheme(null);
+    };
+    if(mq.addEventListener) mq.addEventListener("change", onChange);
+    else if(mq.addListener) mq.addListener(onChange);
+  }
+})();
+
+/* saisie des champs */
+Object.keys(FIELDS).forEach(function(k){
+  var el = document.getElementById(FIELDS[k]);
+  el.addEventListener("input", function(){
+    if(el.readOnly) return;
+    var val = (k === "a") ? parseFloat(String(el.value).replace(",", ".")) : parseLen(el.value);
+    if(!isFinite(val)){ el.classList.add("bad"); return; }
+    el.classList.remove("bad");
+    if(k === "t"){ document.getElementById("gauge").value = ""; }
+    S[k] = val;
+    render();
+  });
+  el.addEventListener("blur", function(){ el.classList.remove("bad"); render(); });
+  /* flèches haut/bas : pas fin, Maj pour dix fois plus fin */
+  el.addEventListener("keydown", function(e){
+    if(el.readOnly || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    var step = k === "a" ? (e.shiftKey ? .1 : 1)
+             : (S.unit === "mm" ? (e.shiftKey ? .01 : .1)/MM : (e.shiftKey ? .0001 : .001));
+    S[k] = Math.max(0, S[k] + (e.key === "ArrowUp" ? step : -step));
+    el.value = (k === "a") ? fmtAng(S[k]) : fmtLen(S[k]);
+    render();
+  });
+});
+
+/* choix de l'inconnue */
+document.querySelectorAll(".dot[data-k]").forEach(function(b){
+  b.innerHTML = IC.target;
+  b.onclick = function(){
+    S.unknown = b.getAttribute("data-k");
+    render();
+    var f = document.getElementById(FIELDS[S.unknown]);
+    if(f) f.blur();
+  };
+});
+
+/* présélections d'angle */
+document.querySelectorAll(".chip[data-ang]").forEach(function(b){
+  b.onclick = function(){
+    var a = +b.getAttribute("data-ang");
+    if(S.unknown === "a") S.unknown = "d";     /* fixer l'angle, c'est en faire une mesure */
+    S.a = a;
+    render();
+  };
+});
+
+document.getElementById("gauge").onchange = function(){
+  var v = parseFloat(this.value);
+  if(isFinite(v)){ S.t = v; render(); }
+};
+document.getElementById("full").onclick = function(){
+  if(S.unknown === "h") S.unknown = "d";
+  S.h = 0;
+  render();
+};
+
+/* diagnostics et forets : clics délégués, le contenu est regénéré à chaque rendu */
+document.getElementById("diag").addEventListener("click", function(e){
+  var b = e.target.closest("[data-snap]");
+  if(!b) return;
+  if(S.unknown === "a") S.unknown = "d";
+  S.a = +b.getAttribute("data-snap");
+  render();
+});
+document.getElementById("drills").addEventListener("click", function(e){
+  var b = e.target.closest("[data-dia]");
+  if(!b) return;
+  if(S.unknown === "d") S.unknown = "D";        /* le foret devient la mesure */
+  S.d = +b.getAttribute("data-dia");
+  render();
+});
+
+/* unités */
+function setUnit(u){
+  S.unit = u;
+  document.getElementById("uin").classList.toggle("on", u === "in");
+  document.getElementById("umm").classList.toggle("on", u === "mm");
+  render();
+}
+document.getElementById("uin").onclick = function(){ setUnit("in"); };
+document.getElementById("umm").onclick = function(){ setUnit("mm"); };
+
+/* copie */
+document.getElementById("copy").onclick = function(){
+  var b = this;
+  var done = function(){
+    b.innerHTML = IC.check + "Copié";
+    setTimeout(function(){ b.innerHTML = IC.copy + "Copier les valeurs"; }, 1400);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(lastText).then(done, function(){});
+  }else{
+    var ta = document.createElement("textarea");
+    ta.value = lastText; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); done(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+};
+
+/* cas d'exemple — ceux qui ont servi à valider le calcul à la main */
+var EXAMPLES = [
+  { t:.064, D:.332, d:.181, a:99.4, h:0,      unknown:"a" },
+  { t:.064, D:.332, d:.221, a:82,   h:0,      unknown:"d" },
+  { t:.075, D:.3075, d:.1771, a:90, h:.0098,  unknown:"d" },
+  { t:.075, D:8/MM, d:.18456, a:90, h:.0098,  unknown:"d" }
+];
+var exi = 0;
+document.getElementById("ex").onclick = function(){
+  var e = EXAMPLES[exi % EXAMPLES.length]; exi++;
+  S.t = e.t; S.D = e.D; S.d = e.d; S.a = e.a; S.h = e.h; S.unknown = e.unknown;
+  document.getElementById("gauge").value = "";
+  render();
+};
+
+load();
+setUnit(S.unit);
+</script>
+</body>
+</html>

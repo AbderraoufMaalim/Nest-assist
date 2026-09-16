@@ -1,5 +1,17 @@
 # Nest Assist
 
+Deux outils d'atelier, une page chacun, servis depuis le même hébergement
+statique et reliés par un bouton dans l'en-tête :
+
+| Page | Outil |
+|---|---|
+| `index.html` | **Nest Assist** — répartition matière → JobBOSS |
+| `fraisage.html` | **Fraisage** — calcul du cône de fraisure en tôle mince |
+
+---
+
+## Nest Assist — répartition matière
+
 Répartition de la consommation de matière première par job, après imbrication
 TruTops, pour saisie dans JobBOSS.
 
@@ -62,3 +74,36 @@ Aucune donnée n'est transmise nulle part : tout reste dans le navigateur.
 Les plans de travail et listes de jobs réels ne doivent pas être versionnés
 (voir `.gitignore`) — ils contiennent des noms de clients et des références
 de production.
+
+---
+
+## Fraisage — calcul du cône de fraisure
+
+`fraisage.html`. Une seule relation, lue dans les quatre sens :
+
+```
+Ø extérieur = Ø intérieur + 2 · p · tan(θ/2)      p = épaisseur − bord droit
+```
+
+`θ` est l'angle **inclus total**, pas le demi-angle. `p` est la profondeur du
+cône, qui n'est **pas** l'épaisseur de la tôle dès qu'il reste une paroi droite
+sous le fraisage — c'est le piège habituel, d'où le champ « bord droit » séparé
+et le bouton « Pleine profondeur » pour le cas h = 0.
+
+Le point cible devant un champ (Ø ext, Ø int, angle, bord droit) désigne
+l'inconnue ; les autres sont les mesures. L'épaisseur est toujours une entrée.
+Changer d'inconnue ne perd rien : la valeur calculée est figée dans l'état avant
+la bascule.
+
+- Vue en coupe SVG redessinée en direct : matière hachurée, axe de symétrie,
+  parois prolongées en pointillé jusqu'à l'apex virtuel, cotes fléchées. C'est
+  là qu'on voit pourquoi un 82° creuse plus profond qu'un 100° à Ø égal.
+- Angles normalisés 82 / 90 / 100 / 110 / 120 — et rien d'autre. Un angle
+  bâtard est signalé avec le normalisé le plus proche et son écart.
+- Forets proposés, le meilleur de chaque jeu : numérotés #1–#60, lettres A–Z,
+  fractions au 64e, métriques 1,0–13,0 mm. Un clic prend le foret comme mesure.
+- Jauges de tôle (acier, inox, aluminium), bascule pouces / mm, virgule
+  décimale et fractions tapées telles quelles (« 15/64 », « 1 3/8 »).
+
+L'état est en pouces à l'interne ; l'unité n'est qu'un habillage. Le thème
+(clair / sombre) est partagé avec Nest Assist.

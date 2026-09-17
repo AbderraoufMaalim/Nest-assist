@@ -972,64 +972,154 @@ function formatFromMat(mat){
    Un dernier segment différent n'est accepté que s'il ressemble à un marqueur
    de révision (R00, R1, RA, UN, REV…, A0114) — jamais une variante A / B. */
 function normCode(s){ return String(s||"").toUpperCase().replace(/\s+/g," ").trim(); }
-function codeTokens(s){ return String(s||"").toUpperCase().split(/[\s_\-.]+/).filter(Boolean); }
-var REV_RE = /^(R[A-Z0-9]{0,3}|REV[A-Z0-9]*|UN|[A-Z]\d{3,})$/;
-var TIER_TXT = { 4:"code identique", 3:"séparateurs différents",
-                 2:"révision en plus — à confirmer", 1:"révision différente — à confirmer" };
 
-/* 4 identique · 3 mêmes segments, séparateurs différents ·
-   2 l'un prolonge l'autre par une révision · 1 révisions différentes · 0 aucun lien */
-function codeTier(a, b){
-  if(!a || !b) return 0;
-  if(normCode(a) === normCode(b)) return 4;
-  var ta = codeTokens(a), tb = codeTokens(b);
-  if(!ta.length || !tb.length) return 0;
-  if(ta.join("|") === tb.join("|")) return 3;
-  var p = 0, n = Math.min(ta.length, tb.length);
-  while(p < n && ta[p] === tb[p]) p++;
-  if(p === 0) return 0;
-  var ra = ta.slice(p), rb = tb.slice(p);
-  var rev = function(t){ return t.every(function(x){ return REV_RE.test(x); }); };
-  if((!ra.length && rev(rb)) || (!rb.length && rev(ra))) return 2;
-  if(ra.length === 1 && rb.length === 1 && rev(ra) && rev(rb)) return 1;
-  return 0;
+/* Règle calibrée sur 76 paires réelles (12 nests). Trois constats de ces données :
+
+   1. L'écart est ASYMÉTRIQUE. Boost ajoute du bruit en fin de code (RA, R1,
+      REV02, PROG, QUEFER…), JobBOSS porte l'identité. Sur 48 écarts, JobBOSS
+      n'a jamais ajouté que -UN et -BLKE, qui sont des finitions : on peut
+      retirer un segment côté plan, jamais côté JobBOSS.
+   2. La colonne révision du dashboard confirme le segment retiré 35 fois
+      sur 48 — ce n'est plus une supposition de forme, c'est une vérification.
+   3. Un NOMBRE NU n'est jamais une révision : « IP42982B L48 » et « L96 » se
+      seraient confondus. Il faut un marqueur R / REV / UN.
+
+   La comparaison se fait séparateurs supprimés, au caractère près : ça règle
+   d'un coup BOÎTIER/BOITIER, Support/SUPPORT, 24LH/24-LH, _125/-125. Découper
+   aux frontières chiffre/lettre, en revanche, effaçait la différence entre
+   EN47619 et EN47619B — testé, et écarté pour cette raison. */
+var REV_RE = /^(R\d{1,3}|R[A-Z]|REV\d{0,3}|UN)$/;
+var TIER_TXT = { 4:"code identique",
+                 3:"révision confirmée par JobBOSS",
+                 2:"suffixe retiré côté plan — à confirmer",
+                 1:"segment en plus côté JobBOSS — à confirmer",
+                 q:"rapproché par la quantité — à vérifier" };
+
+function noAcc(s){
+  s = String(s||"");
+  return s.normalize ? s.normalize("NFD").replace(/[̀-ͯ]/g, "") : s;
 }
-/* une ligne peut porter deux codes : celui du plan et celui de JobBOSS */
-function rowTier(code, r){ return Math.max(codeTier(code, r.piece), codeTier(code, r.dcode)); }
+function codeCore(s){ return noAcc(s).toUpperCase().replace(/[\s_\-./]+/g, ""); }
+
+/* Code sans séparateurs + positions des fins de segment. La coupure entre le
+   tronc commun et le résidu doit tomber sur une frontière DES DEUX CÔTÉS :
+   sinon EN47619-R1 et EN47619B-UN se rapprochent en coupant au milieu de
+   « EN47619B », ce qui est faux. */
+function codeParts(s){
+  var segs = noAcc(s).toUpperCase().split(/[\s_\-./]+/).filter(Boolean);
+  var core = "", bound = {};
+  segs.forEach(function(g){ core += g; bound[core.length] = 1; });
+  return { core:core, bound:bound };
+}
+
+/* Formes acceptables du segment de révision, d'après la colonne du dashboard :
+   la révision « 0 » peut s'écrire R0, R00, REV00… dans le code Boost. */
+function revForms(rev){
+  var r = noAcc(rev).toUpperCase().trim(), out = {};
+  if(!r) return out;
+  var base = r.replace(/^R+/, "") || r;
+  var nz = base.replace(/^0+/, "") || base;
+  [base, nz].forEach(function(x){
+    ["", "R", "REV", "R0", "R00", "REV0", "REV00"].forEach(function(pre){ out[pre + x] = 1; });
+  });
+  out[r] = 1; out["R" + r] = 1;
+  return out;
+}
+
+/* Renvoie {t:niveau, p:longueur du préfixe commun}. Le préfixe départage les
+   ex aequo — sans lui, EN47619B-UN hésite entre EN47619B-R1 et EN47619-R1. */
+function codeScore(plan, dash, rev){
+  var A = codeParts(plan), B = codeParts(dash);
+  var a = A.core, b = B.core;
+  if(!a || !b) return { t:0, p:0 };
+  if(a === b) return { t:4, p:a.length };
+  var p = 0, n = Math.min(a.length, b.length);
+  while(p < n && a.charAt(p) === b.charAt(p)) p++;
+  if(p < 4 || p < 0.5 * n) return { t:0, p:0 };      /* trop peu commun : rien */
+  if(!A.bound[p] || !B.bound[p]) return { t:0, p:0 }; /* coupure au milieu d'un segment */
+  var ra = a.slice(p), rb = b.slice(p);
+  var conf = revForms(rev)[ra] === 1;                 /* confirmé par la colonne révision */
+  if(!rb && ra) return { t: conf ? 3 : 2, p:p };      /* le plan porte un segment en plus */
+  if(ra && rb)  return { t: conf ? 3 : (REV_RE.test(ra) ? 2 : 0), p:p };
+  return { t:1, p:p };                                /* JobBOSS seul porte un segment */
+}
+
+/* it = {code, rev, qty} ; dir "dash" : it vient du dashboard, la ligne porte le
+   code du plan. dir "plan" : it est une pièce du plan, la ligne vient de JobBOSS. */
+function rowScore(it, r, dir){
+  var best = { t:0, p:0 };
+  [r.piece, r.dcode].forEach(function(code){
+    if(!code) return;
+    var s = dir === "plan" ? codeScore(it.code, code, r.rev)
+                           : codeScore(code, it.code, it.rev);
+    if(s.t > best.t || (s.t === best.t && s.p > best.p)) best = s;
+  });
+  return best;
+}
 
 /* Rapprochement un-pour-un, du plus sûr au moins sûr.
    - Niveaux sûrs (4, 3) : chaque source prend la première ligne libre qui
      correspond ; une seconde source visant la même pièce devient "jumelle".
    - Niveaux incertains (2, 1) : seulement si la paire est unique des deux
      côtés. Au moindre doute, rien — l'opérateur choisit à la main. */
-function assignCodes(codes, targets, allRows){
-  var res = codes.map(function(){ return null; }), taken = {};
+function assignCodes(items, targets, allRows, dir){
+  var res = items.map(function(){ return null; }), taken = {};
   var free = function(r){ return !taken[r.id]; };
-  [4,3].forEach(function(t){
-    codes.forEach(function(c,i){
-      if(res[i] || !c) return;
-      var r = targets.filter(function(x){ return free(x) && rowTier(c,x) === t; })[0];
-      if(r){ res[i] = { rowId:r.id, tier:t }; taken[r.id] = true; }
+
+  /* meilleure ligne libre à ce niveau ; "ambigu" si deux se valent */
+  function best(it, t){
+    var c = [];
+    targets.forEach(function(r){
+      if(!free(r)) return;
+      var s = rowScore(it, r, dir);
+      if(s.t === t) c.push({ r:r, p:s.p });
+    });
+    if(!c.length) return null;
+    c.sort(function(x,y){ return y.p - x.p; });
+    return (c.length > 1 && c[0].p === c[1].p) ? "ambigu" : c[0].r;
+  }
+
+  [4,3].forEach(function(t){                 /* niveaux sûrs */
+    items.forEach(function(it,i){
+      if(res[i] || !it.code) return;
+      var r = best(it, t);
+      if(r && r !== "ambigu"){ res[i] = { rowId:r.id, tier:t }; taken[r.id] = true; }
     });
   });
-  [2,1].forEach(function(t){
+  [2,1].forEach(function(t){                 /* niveaux incertains : unicité exigée des deux côtés */
     var changed = true;
     while(changed){
       changed = false;
-      codes.forEach(function(c,i){
-        if(res[i] || !c) return;
-        var cand = targets.filter(function(x){ return free(x) && rowTier(c,x) === t; });
-        if(cand.length !== 1) return;
-        var rivals = codes.filter(function(c2,j){ return j !== i && !res[j] && c2 && rowTier(c2,cand[0]) === t; });
+      items.forEach(function(it,i){
+        if(res[i] || !it.code) return;
+        var r = best(it, t);
+        if(!r || r === "ambigu") return;
+        var rivals = items.filter(function(it2,j){
+          return j !== i && !res[j] && it2.code && rowScore(it2, r, dir).t === t; });
         if(rivals.length) return;
-        res[i] = { rowId:cand[0].id, tier:t }; taken[cand[0].id] = true; changed = true;
+        res[i] = { rowId:r.id, tier:t }; taken[r.id] = true; changed = true;
       });
     }
   });
+
+  /* Dernier recours : la quantité. Dans les données mesurées, elle est
+     identique des deux côtés 75 fois sur 76 — mais c'est le signal le plus
+     fragile, donc uniquement si elle ne désigne qu'une seule ligne libre,
+     et toujours affiché comme « à vérifier ». */
+  items.forEach(function(it,i){
+    if(res[i] || !it.code || !it.qty) return;
+    var c = targets.filter(function(r){ return free(r) && +r.qty === +it.qty; });
+    var rivals = items.filter(function(it2,j){
+      return j !== i && !res[j] && it2.code && +it2.qty === +it.qty; });
+    if(c.length === 1 && !rivals.length){
+      res[i] = { rowId:c[0].id, tier:"q" }; taken[c[0].id] = true;
+    }
+  });
+
   /* restée seule alors que la même pièce existe déjà : une autre job, même pièce */
-  codes.forEach(function(c,i){
-    if(res[i] || !c) return;
-    var twin = (allRows || targets).filter(function(x){ return rowTier(c,x) >= 3; })[0];
+  items.forEach(function(it,i){
+    if(res[i] || !it.code) return;
+    var twin = (allRows || targets).filter(function(r){ return rowScore(it, r, dir).t >= 3; })[0];
     if(twin) res[i] = { rowId:0, tier:0, twin:twin.id };
   });
   return res;
@@ -1038,7 +1128,8 @@ function rowLabel(r, i){ return (r.piece || r.job || ("ligne " + (i+1))); }
 function rowById(id){ return S.rows.filter(function(r){ return r.id === +id; })[0]; }
 function tierNote(t){
   if(!t || !TIER_TXT[t]) return "";
-  return '<div style="font-size:9px;margin-top:2px;color:' + (t >= 3 ? "var(--ok)" : "var(--pin)") + '">'
+  var sur = (t === 4 || t === 3);
+  return '<div style="font-size:9px;margin-top:2px;color:' + (sur ? "var(--ok)" : "var(--pin)") + '">'
        + TIER_TXT[t] + '</div>';
 }
 
@@ -1071,8 +1162,9 @@ function analyse(){
   seen = {};
   /* on ne rattache qu'aux lignes encore sans job : une ligne qui a déjà
      son job et qui porte le même code, c'est une autre job de la même pièce */
-  var A = hasRows ? assignCodes(IMP.rows.map(function(r){ return r.dup ? "" : r.piece; }),
-                                S.rows.filter(function(x){ return !x.job; }), S.rows) : [];
+  var A = hasRows ? assignCodes(
+        IMP.rows.map(function(r){ return { code: r.dup ? "" : r.piece, rev:r.rev, qty:r.qty }; }),
+        S.rows.filter(function(x){ return !x.job; }), S.rows, "dash") : [];
 
   /* liste des destinations possibles quand un plan a déjà été importé */
   var destOpts = '<option value="0">+ nouvelle ligne</option>'
@@ -1093,7 +1185,7 @@ function analyse(){
       r.twin = mm && mm.twin ? mm.twin : null;
     }
     if(r.dest) merged++;
-    if(r.tier === 1 || r.tier === 2) fuzzy++;
+    if(r.tier === 1 || r.tier === 2 || r.tier === "q") fuzzy++;
     if(r.twin && !r.dest) twins++;
 
     var flag = r.dup ? '<span style="color:var(--pin);font-size:10px"> déjà présent</span>'
@@ -1324,7 +1416,8 @@ var PDFR = null;
    Recalculé à chaque ouverture de l'aperçu : il dépend de l'état du tableau.
    Les choix faits à la main dans le menu (R.override) priment. */
 function planMapping(R){
-  var auto = assignCodes(R.parts.map(function(p){ return p.code; }), S.rows, S.rows);
+  var auto = assignCodes(R.parts.map(function(p){ return { code:p.code, rev:"", qty:p.qty }; }),
+                         S.rows, S.rows, "plan");
   var out = {};
   R.parts.forEach(function(p,i){
     var o = R.override ? R.override[p.code] : undefined;
@@ -1369,7 +1462,7 @@ function showPlan(R){
   var fuzzy = 0;
   R.parts.forEach(function(p,i){
     var m = map[p.code];
-    if(m.tier === 1 || m.tier === 2) fuzzy++;
+    if(m.tier === 1 || m.tier === 2 || m.tier === "q") fuzzy++;
     h += '<tr><td>'+esc(p.code)+'</td><td class="mono" style="text-align:right">'
       + (p.surf === null ? '<span style="color:var(--bad)">illisible</span>' : fmt(p.surf,6)+' ft²')
       + '</td><td class="mono" style="text-align:right">'+(p.qty === null ? "—" : p.qty)+'</td>'
@@ -1391,7 +1484,8 @@ function showPlan(R){
        + fuzzy + ' rapprochement' + (fuzzy>1?"s":"") + ' sur une révision différente — vérifie-les.</div>';
     /* jobs qui portent la même pièce qu'une autre : elles resteront à 0 % */
     var twins = S.rows.filter(function(r){
-      return !taken[r.id] && R.parts.some(function(p){ return rowTier(p.code, r) >= 3; });
+      return !taken[r.id] && R.parts.some(function(p){
+        return rowScore({code:p.code, rev:"", qty:p.qty}, r, "plan").t >= 3; });
     });
     if(twins.length) h += '<div class="hint" style="background:var(--pin-bg);border-color:var(--pin-line);color:var(--warn)">'
        + 'Même pièce qu\'une autre job : <b>' + twins.map(function(r){ return esc(r.job || r.piece); }).join(", ")

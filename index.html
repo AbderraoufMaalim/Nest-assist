@@ -1427,9 +1427,30 @@ function planMapping(R){
   return out;
 }
 
+/* Format de feuille annoncé par le plan : la plus grande tôle qu'il utilise.
+   Les seules retailles en inventaire font 12″ ou 24″. Donc une tôle plus
+   petite que le standard mais de l'une de ces deux tailles est une retaille,
+   et le standard ne bouge pas — 58809_L49 découpe sur des 24″ et des 12″
+   alors que son standard est 100″. Toute autre taille est un vrai format de
+   feuille, et c'est le plan qui a raison, pas le réglage laissé en haut. */
+function planFormat(R){
+  var best = null;
+  R.progs.forEach(function(P){
+    if(!P.len || !P.wid) return;
+    if(!best || P.len * P.wid > best.len * best.wid) best = { len:P.len, wid:P.wid };
+  });
+  if(!best) return null;
+  if(best.len === S.std.len && best.wid === S.std.wid) return null;      /* déjà le bon */
+  if(best.len < S.std.len && (best.len === 12 || best.len === 24)) return null;  /* retailles */
+  return best;
+}
+
 function showPlan(R){
   var box = document.getElementById("pprev");
-  var stdLen = S.std.len;
+  var nf = planFormat(R);
+  if(nf && R.useFmt === undefined) R.useFmt = true;
+  var stdLen = (nf && R.useFmt) ? nf.len : S.std.len;
+  var stdWid = (nf && R.useFmt) ? nf.wid : S.std.wid;
   var pr = proratePlan(R, stdLen);
   var engaged = pr.reduce(function(s,x){ return s + x.mult * x.prog.rep; }, 0);
 
@@ -1499,8 +1520,16 @@ function showPlan(R){
     + 'qté sur tôle × répétition = total, sur les ' + R.progs.length + ' programmes</div>'
     + '</div>';
 
-  h += '<div class="hint" style="margin-top:12px"><span>Matière engagée avec le format standard actuel '
-     + '<b>'+S.std.wid+' × '+S.std.len+'″</b> : <b>'+f2(Math.round(engaged*100)/100)+' feuille'
+  if(nf){
+    h += '<div class="hint" style="margin-top:12px"><label><input type="checkbox" id="applyplanfmt"'
+       + (R.useFmt ? " checked" : "") + '>Passer le format standard à <b>&nbsp;'
+       + nf.wid + ' × ' + nf.len + '&Prime;</b></label>'
+       + '<span style="color:var(--ink-soft)">le plan découpe sur des tôles de ce format, '
+       + 'et non sur les ' + S.std.wid + ' × ' + S.std.len + '&Prime; réglés en haut. '
+       + 'Ce n\'est ni 12&Prime; ni 24&Prime;, donc ce ne sont pas des retailles</span></div>';
+  }
+  h += '<div class="hint" style="margin-top:12px"><span>Matière engagée avec le format '
+     + '<b>'+stdWid+' × '+stdLen+'″</b> : <b>'+f2(Math.round(engaged*100)/100)+' feuille'
      + (engaged>1?"s":"")+'</b>. '
      + 'Change le format en haut de la page si ce n\'est pas celui du bon de matière.</span></div>';
 
@@ -1514,6 +1543,13 @@ function showPlan(R){
 }
 
 function applyPlan(R){
+  /* le format détecté doit être posé AVANT de calculer les multiplicateurs */
+  var nf = planFormat(R);
+  if(nf && R.useFmt !== false){
+    S.std = { len:nf.len, wid:nf.wid };
+    document.getElementById("stdlen").value = nf.len;
+    document.getElementById("stdwid").value = nf.wid;
+  }
   var pr = proratePlan(R, S.std.len);
   /* Le plan redéfinit les tôles, mais on garde les lignes déjà saisies ou
      importées du dashboard : un job déjà identifié n'est pas perdu. */
@@ -1628,6 +1664,9 @@ document.addEventListener("change", function(e){
     var blk = setPct(c, +el.dataset.r, parseNum(el.value));
     refresh();
     if(blk) flashPins(c);
+  } else if(el.id === "applyplanfmt" && PDFR){
+    PDFR.useFmt = el.checked;
+    showPlan(PDFR);
   } else if(el.id === "autopin"){ S.autoPin = el.checked; }
   else if(el.dataset && el.dataset.take !== undefined){
     var i = +el.dataset.take;

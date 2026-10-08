@@ -105,7 +105,7 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 1
 .cbody{padding:12px 14px}
 
 /* ---------- lignes de mesure ---------- */
-.row{display:grid;grid-template-columns:26px 1fr 128px 30px;align-items:center;gap:8px;
+.row{display:grid;grid-template-columns:26px 1fr 128px 30px;align-items:center;gap:2px 8px;
   padding:5px 4px;border-radius:8px}
 .row+.row{margin-top:2px}
 .row:hover{background:var(--hover)}
@@ -128,6 +128,30 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 1
   font-weight:700;cursor:default}
 .row.derived .val{background:var(--panel-2);border-style:dashed;color:var(--ink-soft);cursor:default}
 .unit{font-size:11.5px;color:var(--ink-faint)}
+
+/* ---------- glissières ----------
+   Une sous chaque mesure. Celle de l'inconnue est verrouillée mais suit le
+   calcul : on voit l'effet d'un geste sur l'autre valeur pendant qu'on tire. */
+.slw{grid-column:2 / 4;position:relative;height:20px}
+.sl{-webkit-appearance:none;appearance:none;display:block;width:100%;height:20px;margin:0;
+  background:transparent;cursor:pointer;--pct:0%;--c:var(--exact)}
+.sl:focus{outline:none}
+.sl:focus-visible{outline:2px solid var(--focus);outline-offset:1px;border-radius:4px}
+.sl::-webkit-slider-runnable-track{height:4px;border-radius:2px;
+  background:linear-gradient(to right,var(--c) var(--pct),var(--track) var(--pct))}
+.sl::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;margin-top:-5.5px;
+  border-radius:50%;background:var(--panel);border:2px solid var(--c);
+  box-shadow:0 1px 3px rgba(16,24,40,.25);transition:transform .1s}
+.sl::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
+.sl::-moz-range-progress{height:4px;border-radius:2px;background:var(--c)}
+.sl::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--panel);
+  border:2px solid var(--c);box-shadow:0 1px 3px rgba(16,24,40,.25)}
+.sl:not(:disabled):hover::-webkit-slider-thumb,.sl:not(:disabled):active::-webkit-slider-thumb{transform:scale(1.2)}
+.sl:disabled{cursor:default;--c:var(--result)}
+.sl:disabled::-webkit-slider-thumb{background:var(--result);box-shadow:none}
+.sl:disabled::-moz-range-thumb{background:var(--result);box-shadow:none}
+/* repères des angles normalisés, sous la piste */
+.tick{position:absolute;top:14px;width:1px;height:5px;background:var(--line-strong);pointer-events:none}
 
 .sub{margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line-soft);
   display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -689,6 +713,7 @@ function render(){
     if(isT && isFinite(v[k])) S[k] = v[k];
   }
   document.getElementById("v_p").value = fmtLen(v.p);
+  syncSliders(v);
   var uu = unitLabel();
   var us = document.querySelectorAll("[data-u]");
   for(var i = 0; i < us.length; i++) us[i].innerHTML = uu === "mm" ? "mm" : "&Prime;";
@@ -873,6 +898,79 @@ Object.keys(FIELDS).forEach(function(k){
     el.value = (k === "a") ? fmtAng(S[k]) : fmtLen(S[k]);
     render();
   });
+});
+
+/* ---------------- glissières ----------------
+   Les bornes sont en pouces, comme l'état. Celle du bord droit suit
+   l'épaisseur ; les autres s'élargissent si une valeur sort du cadre, mais ne
+   rétrécissent jamais — sinon le curseur sauterait sous la souris. */
+var RANGE = {
+  t:{ min:.010, max:.250, step:.0005 },
+  D:{ min:.020, max:.750, step:.0005 },
+  d:{ min:.020, max:.750, step:.0005 },
+  a:{ min:60,   max:140,  step:.1    },
+  h:{ min:0,    max:null, step:.0001 }
+};
+var SL = {};
+/* aimant : à moins de 0,6° d'un angle normalisé, on y colle */
+function snapAngle(a){
+  for(var i = 0; i < STD_ANGLES.length; i++)
+    if(Math.abs(a - STD_ANGLES[i]) < 0.6) return STD_ANGLES[i];
+  return a;
+}
+function paintSlider(sl){
+  var mn = +sl.min, mx = +sl.max, val = +sl.value;
+  var pct = mx > mn ? (val - mn) / (mx - mn) * 100 : 0;
+  sl.style.setProperty("--pct", Math.max(0, Math.min(100, pct)) + "%");
+}
+function syncSliders(v){
+  for(var k in SL){
+    if(!SL.hasOwnProperty(k)) continue;
+    var sl = SL[k], r = RANGE[k], val = v[k], isT = (k === S.unknown);
+    var mx;
+    if(k === "h") mx = Math.max(v.t, .001);
+    else{
+      if(isFinite(val) && val > sl._max) sl._max = Math.ceil(val * 1.25 * 20) / 20;
+      mx = sl._max;
+    }
+    sl.min = r.min; sl.max = mx; sl.step = r.step;
+    sl.disabled = isT;
+    sl.title = isT ? NAMES[k] + " — calculé, la glissière suit" : NAMES[k];
+    if((isT || document.activeElement !== sl) && isFinite(val))
+      sl.value = Math.max(r.min, Math.min(mx, val));
+    paintSlider(sl);
+  }
+}
+Object.keys(FIELDS).forEach(function(k){
+  var w = document.createElement("div");
+  w.className = "slw";
+  var sl = document.createElement("input");
+  sl.type = "range";
+  sl.className = "sl";
+  sl.id = "sl_" + k;
+  sl.setAttribute("aria-label", NAMES[k]);
+  sl._max = RANGE[k].max;
+  w.appendChild(sl);
+  if(k === "a"){
+    STD_ANGLES.forEach(function(a){
+      var t = document.createElement("span");
+      t.className = "tick";
+      var f = (a - RANGE.a.min) / (RANGE.a.max - RANGE.a.min);
+      /* le centre du curseur parcourt la piste moins une largeur de curseur */
+      t.style.left = "calc(7.5px + (100% - 15px) * " + f + ")";
+      w.appendChild(t);
+    });
+  }
+  document.getElementById("r_" + k).appendChild(w);
+  sl.addEventListener("input", function(){
+    if(sl.disabled) return;
+    var val = +sl.value;
+    if(k === "a"){ val = snapAngle(val); sl.value = val; }
+    if(k === "t") document.getElementById("gauge").value = "";
+    S[k] = val;
+    render();
+  });
+  SL[k] = sl;
 });
 
 /* choix de l'inconnue */

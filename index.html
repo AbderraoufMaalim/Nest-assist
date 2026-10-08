@@ -210,7 +210,7 @@ tr:hover .cp{opacity:1}
 td.fc{padding:0;vertical-align:top}
 .cell{padding:7px 9px 9px;position:relative}
 .valrow{display:flex;align-items:baseline;justify-content:center;gap:1px;margin-bottom:3px}
-.pct{width:42px;text-align:right;border:0;background:none;outline:none;font-size:17px;font-weight:700;
+.pct{width:54px;text-align:right;border:0;background:none;outline:none;font-size:17px;font-weight:700;
   font-variant-numeric:tabular-nums;padding:1px 2px;border-radius:4px}
 .pct:focus{background:var(--focus-bg);box-shadow:0 0 0 2px var(--focus)}
 .pcs{font-size:11px;color:var(--ink-faint);font-weight:600}
@@ -488,8 +488,17 @@ function recovered(c){ return 12*c.r12 + 24*c.r24; }
 function consumed(c){ return startLen(c) - recovered(c); }
 function mult(c){ var v = consumed(c); return v > 0 ? v / S.std.len : 0; }
 function weight(c){ return mult(c) * c.qty; }
+/* Les parts sont des ENTIERS en centièmes de pourcent : une colonne fait
+   exactement 10 000. Avec des pourcents entiers, une petite pièce à 0,75 %
+   devenait 1 % — et sur une tôle répétée 6 fois, la Valeur JobBOSS d'une
+   petite pièce s'écartait de 20 % (J28338 : 100,00 au lieu de 120,00).
+   Toujours des entiers, donc toujours une somme exacte, mais 100 fois plus fin. */
+var SCALE = 10000;
+function pctOf(v){ return v * 100 / SCALE; }                 /* unités → % */
+function unitsOf(pct){ return Math.round(pct * SCALE / 100); } /* % → unités */
+function pctTxt(v){ return fmt(pctOf(v), 2); }               /* 7500 → « 75 », 75 → « 0,75 » */
 function colSum(c){ return S.rows.reduce(function(s,r){ return s + get(r.id,c.id); }, 0); }
-function rowTotal(r){ return S.cols.reduce(function(s,c){ return s + get(r.id,c.id)/100 * weight(c); }, 0); }
+function rowTotal(r){ return S.cols.reduce(function(s,c){ return s + get(r.id,c.id)/SCALE * weight(c); }, 0); }
 function grandW(){ return S.cols.reduce(function(s,c){ return s + weight(c); }, 0); }
 
 /* =============== répartition entière exacte =============== */
@@ -546,15 +555,15 @@ function jbValue(qty, hundredths){
 function setPct(c, rid, want){
   if(S.rows.length === 0) return false;
   if(stOf(c,rid) === "locked") return "locked";
-  if(S.rows.length === 1){ set(rid,c.id,100); c.seen = true; return false; }
-  want = Math.max(0, Math.min(100, Math.round(want)));
+  if(S.rows.length === 1){ set(rid,c.id,SCALE); c.seen = true; return false; }
+  want = Math.max(0, Math.min(SCALE, Math.round(want)));
   var free = freeOf(c, rid);
   if(free.length === 0) return "locked";
   var held = 0;
   S.rows.forEach(function(r){ if(r.id !== rid && !isFree(c,r.id)) held += get(r.id,c.id); });
-  var max = 100 - held, blocked = want > max;
+  var max = SCALE - held, blocked = want > max;
   want = Math.min(want, max);
-  var vals = distribute(100 - held - want, free.map(function(r){ return get(r.id,c.id); }));
+  var vals = distribute(SCALE - held - want, free.map(function(r){ return get(r.id,c.id); }));
   free.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
   set(rid,c.id,want);
   if(S.autoPin && stOf(c,rid) === "free") c.st[rid] = "set";
@@ -568,13 +577,13 @@ function moveBoundary(c, i, pct){
   var before = 0;
   for(var k=0;k<i;k++) before += get(S.rows[k].id, c.id);
   var pair = get(a.id,c.id) + get(b.id,c.id);
-  var va = Math.max(0, Math.min(pair, Math.round(pct) - before));
+  var va = Math.max(0, Math.min(pair, unitsOf(pct) - before));
   set(a.id, c.id, va); set(b.id, c.id, pair - va);
   c.seen = true;
   return true;
 }
 function equalize(c){
-  var vals = distribute(100, S.rows.map(function(){ return 1; }));
+  var vals = distribute(SCALE, S.rows.map(function(){ return 1; }));
   S.rows.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
   c.st = {}; c.seen = false;
 }
@@ -586,13 +595,13 @@ function reseal(c){
   });
   var free = S.rows.filter(function(r){ return isFree(c,r.id); });
   if(free.length === 0){
-    var all = distribute(100, S.rows.map(function(r){ return get(r.id,c.id); }));
+    var all = distribute(SCALE, S.rows.map(function(r){ return get(r.id,c.id); }));
     S.rows.forEach(function(r,i){ set(r.id,c.id,all[i]); });
     c.seen = false; return;
   }
   var held = 0;
   S.rows.forEach(function(r){ if(!isFree(c,r.id)) held += get(r.id,c.id); });
-  var vals = distribute(Math.max(0,100-held), free.map(function(r){ return get(r.id,c.id); }));
+  var vals = distribute(Math.max(0,SCALE-held), free.map(function(r){ return get(r.id,c.id); }));
   free.forEach(function(r,i){ set(r.id,c.id,vals[i]); });
 }
 
@@ -705,9 +714,9 @@ function render(){
     S.cols.forEach(function(c){
       body += '<td class="fc"><div class="cell" data-cell="'+r.id+'-'+c.id+'" style="--sc:'+rowColor(ri)+'">'
         + '<button class="pin" data-pinrow="'+r.id+'" data-pincol="'+c.id+'">'+IC.pin+'</button>'
-        + '<div class="valrow"><input class="pct" data-r="'+r.id+'" data-c="'+c.id+'" value="0" inputmode="numeric">'
+        + '<div class="valrow"><input class="pct" data-r="'+r.id+'" data-c="'+c.id+'" value="0" inputmode="decimal">'
         +   '<span class="pcs">%</span></div>'
-        + '<input type="range" class="sl" min="0" max="100" step="1" value="0" data-r="'+r.id+'" data-c="'+c.id+'">'
+        + '<input type="range" class="sl" min="0" max="'+SCALE+'" step="10" value="0" data-r="'+r.id+'" data-c="'+c.id+'">'
         + '<span class="tag" data-o="tag"></span></div></td>';
     });
     body += '<td class="addcol"></td>'
@@ -784,13 +793,14 @@ function drawBar(c){
   S.rows.forEach(function(r, i){
     var v = get(r.id, c.id);
     if(v > 0){
-      h += '<div class="seg" style="left:'+cum+'%;width:'+v+'%;background:'+rowColor(i)+'" '
-         + 'title="'+esc(r.job || ("ligne "+(i+1)))+' — '+v+' %">'+(v >= 12 ? v+"%" : "")+'</div>';
+      h += '<div class="seg" style="left:'+pctOf(cum)+'%;width:'+pctOf(v)+'%;background:'+rowColor(i)+'" '
+         + 'title="'+esc(r.job || ("ligne "+(i+1)))+' — '+pctTxt(v)+' %">'
+         + (pctOf(v) >= 12 ? Math.round(pctOf(v))+"%" : "")+'</div>';
     }
     cum += v;
     if(i < S.rows.length-1){
       var fx = stOf(c,r.id)==="locked" || stOf(c,S.rows[i+1].id)==="locked";
-      h += '<div class="div'+(fx?" fixed":"")+'" style="left:'+cum+'%" data-bd="'+i+'" data-bc="'+c.id+'" title="'
+      h += '<div class="div'+(fx?" fixed":"")+'" style="left:'+pctOf(cum)+'%" data-bd="'+i+'" data-bc="'+c.id+'" title="'
          + (fx ? "Une des deux lignes est verrouillée" : "Glisser pour transférer entre voisins")+'"></div>';
     }
   });
@@ -832,8 +842,8 @@ function refresh(skip){
       var v = get(r.id,c.id), st = stOf(c,r.id), mv = canMove(c,r.id);
       var sl = box.querySelector('.sl'), pc = box.querySelector('.pct');
       if(sl !== skip) sl.value = v;
-      if(pc !== skip && pc !== document.activeElement) pc.value = v;
-      sl.style.setProperty("--p", v + "%");
+      if(pc !== skip && pc !== document.activeElement) pc.value = pctTxt(v);
+      sl.style.setProperty("--p", pctOf(v) + "%");
       box.classList.toggle("z", v === 0);
       box.classList.toggle("set", st === "set");
       box.classList.toggle("locked", st === "locked");
@@ -1442,7 +1452,7 @@ function proratePlan(R, stdLen, stdWid){
   return R.progs.map(function(P){
     var net = P.lines.map(function(l){ return (surf[l.code] || 0) * (l.per || 0); });
     var tot = net.reduce(function(a,b){ return a+b; }, 0);
-    var pct = distribute(100, net);
+    var pct = distribute(SCALE, net);
     var o = orientSheet(P.len, P.wid, stdWid || S.std.wid);
     return { prog:P, pct:pct, net:net, netTot:tot, len:o.len, wid:o.wid,
              mult: o.len ? o.len / stdLen : 1 };
@@ -1504,7 +1514,7 @@ function showPlan(R){
       + '<td class="mono" style="text-align:right">'+(x.len?x.len+' × '+x.wid+'″':'—')+'</td>'
       + '<td class="mono" style="text-align:right">'+P.rep+'</td>'
       + '<td class="mono" style="text-align:right"><b>'+fmt(x.mult,4)+'</b></td><td>'
-      + P.lines.map(function(l,k){ return esc(l.code)+' <b>'+x.pct[k]+' %</b>'
+      + P.lines.map(function(l,k){ return esc(l.code)+' <b>'+pctTxt(x.pct[k])+' %</b>'
           + (l.per!==null?' <span style="color:var(--ink-faint)">('+l.per+'/tôle)</span>':''); }).join('<br>')
       + '</td></tr>';
   });
@@ -1641,7 +1651,7 @@ document.addEventListener("pointerdown", function(e){
   var sl = e.target.closest && e.target.closest("input[type=range]");
   if(!sl || sl.disabled) return;
   var r = sl.getBoundingClientRect(), TH = 14;
-  var cx = r.left + TH/2 + (+sl.value/100)*(r.width - TH);
+  var cx = r.left + TH/2 + (+sl.value/SCALE)*(r.width - TH);
   if(Math.abs(e.clientX - cx) > 13){ e.preventDefault(); sl.blur(); }
 }, true);
 
@@ -1676,7 +1686,7 @@ document.addEventListener("input", function(e){
     var blocked = setPct(c, +el.dataset.r, +el.value);
     refresh(el);
     el.value = get(+el.dataset.r, c.id);
-    el.style.setProperty("--p", el.value + "%");
+    el.style.setProperty("--p", pctOf(+el.value) + "%");
     if(blocked) flashPins(c);
   } else if(el.dataset.f){
     var tr = el.closest("tr");
@@ -1701,7 +1711,7 @@ document.addEventListener("change", function(e){
   var el = e.target;
   if(el.classList.contains("pct")){
     var c = colOf(el.dataset.c);
-    var blk = setPct(c, +el.dataset.r, parseNum(el.value));
+    var blk = setPct(c, +el.dataset.r, unitsOf(parseNum(el.value)));
     refresh();
     if(blk) flashPins(c);
   } else if(el.id === "applyplanfmt" && PDFR){
@@ -1938,7 +1948,7 @@ document.getElementById("demo").onclick = function(){
             {id:14,job:"125128",piece:"Piece 04",qty:"",rev:""}];
   uid = 20;
   var F = [[50,0,50],[20,70,50],[20,20,0],[10,10,0]];
-  S.rows.forEach(function(r,i){ S.cols.forEach(function(c,j){ set(r.id,c.id,F[i][j]); }); });
+  S.rows.forEach(function(r,i){ S.cols.forEach(function(c,j){ set(r.id,c.id,unitsOf(F[i][j])); }); });
   render();
 };
 

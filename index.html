@@ -1305,11 +1305,32 @@ async function readPlanPdf(file){
 
 /* Table "N° d'ordre | N° pièce | GeoFile | Quantité sur tôle | Pièce".
    Les colonnes sont à des abscisses fixes : on lit par position, pas par ordre. */
+/* Repli quand l'en-tête de la table n'est pas du texte. Certains exports
+   (J28338, poste L76) dessinent TOUS les titres en image : seules les lignes
+   de données restent lisibles. On les reconnaît alors à leur structure :
+     n° de ligne | n° d'ordre (OR51244) | code pièce | fichier .geo | qté/tôle | total
+   Exiger le n° d'ordre écarte les autres lignes contenant un .geo (la fiche
+   pièces de la page 1, les blocs « GeoFile : »). */
+function partsTableByShape(lines){
+  var rows = [];
+  lines.forEach(function(L){
+    var it = L.items.map(function(o){ return o.s.trim(); }).filter(Boolean);
+    var g = -1;
+    for(var k=0;k<it.length;k++) if(/\.geo$/i.test(it[k])){ g = k; break; }
+    if(g < 3) return;
+    if(!/^\d+$/.test(it[0]) || !/^[A-Z]{1,3}\d{3,}$/i.test(it[1])) return;
+    var nums = it.slice(g + 1).filter(function(t){ return /^\d+$/.test(t); });
+    if(nums.length < 2) return;
+    rows.push({ code: it.slice(2, g).join(" "), per: +nums[0], tot: +nums[1] });
+  });
+  return rows;
+}
+
 function partsTable(lines){
   var hi = -1, i;
   for(i=0;i<lines.length;i++)
     if(squash(lines[i].text).indexOf("quantitesurtole") >= 0){ hi = i; break; }
-  if(hi < 0) return null;
+  if(hi < 0) return partsTableByShape(lines);
 
   /* On prend l'abscisse de chaque colonne sur son libellé, pas sur un écart :
      "Quantité sur tôle :" et "Pièce" ne sont séparés que de 7 points. */
@@ -1320,9 +1341,9 @@ function partsTable(lines){
     return best ? best.x : null;
   };
   var oC = d.indexOf("no piece"), oQ = d.indexOf("quantite"), oT = d.lastIndexOf("piece");
-  if(oC < 0 || oQ < 0 || oT <= oQ) return null;
+  if(oC < 0 || oQ < 0 || oT <= oQ) return partsTableByShape(lines);
   var xCode = xAt(oC), xQte = xAt(oQ), xTot = xAt(oT);
-  if(xCode === null || xQte === null || xTot === null) return null;
+  if(xCode === null || xQte === null || xTot === null) return partsTableByShape(lines);
 
   var rows = [];
   for(i=hi+1;i<lines.length;i++){
@@ -1335,7 +1356,7 @@ function partsTable(lines){
     if(!ok){ if(rows.length) break; else continue; }
     rows.push({ code:c.s.trim(), per:+q.s.trim(), tot:+t.s.trim() });
   }
-  return rows;
+  return rows.length ? rows : partsTableByShape(lines);
 }
 
 function parsePlan(pages){
@@ -1387,6 +1408,10 @@ function parsePlan(pages){
     R.progs.push(P);
   });
 
+  /* Titre « Plan de travail » dessiné en image (J28338) : le nom du plan est
+     celui du programme sans son numéro d'ordre — J28338_1 → J28338. */
+  if(!R.plan && R.progs.length) R.plan = R.progs[0].name.replace(/_\d+$/, "");
+
   /* ---- contrôles ---- */
   var sumRep = R.progs.reduce(function(s,p){ return s + p.rep; }, 0);
   R.checkSheets = (R.nSheets !== null && sumRep === R.nSheets);
@@ -1397,16 +1422,30 @@ function parsePlan(pages){
   return R;
 }
 
+/* Une tôle peut être déclarée dans un sens ou dans l'autre : une retaille
+   24 × 48 sort parfois en 48 × 24. Le côté égal à la largeur standard est la
+   largeur ; l'autre est la longueur — c'est elle qui fait le multiplicateur.
+   Sans ça, une 48 × 24 comptait 48/96 = 0,50 feuille au lieu de 0,25.
+   Si aucun côté n'a la largeur standard (autre format), le grand côté est
+   la longueur. */
+function orientSheet(len, wid, stdWid){
+  if(!len || !wid) return { len:len, wid:wid };
+  if(wid === stdWid) return { len:len, wid:wid };
+  if(len === stdWid) return { len:wid, wid:len };
+  return len >= wid ? { len:len, wid:wid } : { len:wid, wid:len };
+}
+
 /* Répartition au prorata des surfaces nettes, programme par programme. */
-function proratePlan(R, stdLen){
+function proratePlan(R, stdLen, stdWid){
   var surf = {};
   R.parts.forEach(function(p){ surf[p.code] = p.surf || 0; });
   return R.progs.map(function(P){
     var net = P.lines.map(function(l){ return (surf[l.code] || 0) * (l.per || 0); });
     var tot = net.reduce(function(a,b){ return a+b; }, 0);
     var pct = distribute(100, net);
-    return { prog:P, pct:pct, net:net, netTot:tot,
-             mult: P.len ? P.len / stdLen : 1 };
+    var o = orientSheet(P.len, P.wid, stdWid || S.std.wid);
+    return { prog:P, pct:pct, net:net, netTot:tot, len:o.len, wid:o.wid,
+             mult: o.len ? o.len / stdLen : 1 };
   });
 }
 
@@ -1437,7 +1476,8 @@ function planFormat(R){
   var best = null;
   R.progs.forEach(function(P){
     if(!P.len || !P.wid) return;
-    if(!best || P.len * P.wid > best.len * best.wid) best = { len:P.len, wid:P.wid };
+    var o = orientSheet(P.len, P.wid, S.std.wid);      /* 48 × 24 = retaille 24″ */
+    if(!best || o.len * o.wid > best.len * best.wid) best = o;
   });
   if(!best) return null;
   if(best.len === S.std.len && best.wid === S.std.wid) return null;      /* déjà le bon */
@@ -1451,7 +1491,7 @@ function showPlan(R){
   if(nf && R.useFmt === undefined) R.useFmt = true;
   var stdLen = (nf && R.useFmt) ? nf.len : S.std.len;
   var stdWid = (nf && R.useFmt) ? nf.wid : S.std.wid;
-  var pr = proratePlan(R, stdLen);
+  var pr = proratePlan(R, stdLen, stdWid);
   var engaged = pr.reduce(function(s,x){ return s + x.mult * x.prog.rep; }, 0);
 
   var h = '<div class="psec"><h4>Plan ' + esc(R.plan) + '</h4>'
@@ -1461,7 +1501,7 @@ function showPlan(R){
   pr.forEach(function(x,i){
     var P = x.prog;
     h += '<tr><td><b>'+(i+1)+'</b></td><td class="mono">'+esc(P.name)+'</td>'
-      + '<td class="mono" style="text-align:right">'+(P.len?P.len+' × '+P.wid+'″':'—')+'</td>'
+      + '<td class="mono" style="text-align:right">'+(x.len?x.len+' × '+x.wid+'″':'—')+'</td>'
       + '<td class="mono" style="text-align:right">'+P.rep+'</td>'
       + '<td class="mono" style="text-align:right"><b>'+fmt(x.mult,4)+'</b></td><td>'
       + P.lines.map(function(l,k){ return esc(l.code)+' <b>'+x.pct[k]+' %</b>'
@@ -1550,7 +1590,7 @@ function applyPlan(R){
     document.getElementById("stdlen").value = nf.len;
     document.getElementById("stdwid").value = nf.wid;
   }
-  var pr = proratePlan(R, S.std.len);
+  var pr = proratePlan(R, S.std.len, S.std.wid);
   /* Le plan redéfinit les tôles, mais on garde les lignes déjà saisies ou
      importées du dashboard : un job déjà identifié n'est pas perdu. */
   var map = planMapping(R);        /* calculé AVANT de vider le tableau */
@@ -1582,7 +1622,7 @@ function applyPlan(R){
   /* une colonne par programme */
   pr.forEach(function(x){
     var P = x.prog;
-    var start = (P.len === S.std.len || P.len === null) ? "full" : String(P.len);
+    var start = (x.len === S.std.len || !x.len) ? "full" : String(x.len);   /* longueur orientée */
     var c = { id:uid++, start:start, r12:0, r24:0, qty:P.rep, st:{}, seen:false };
     S.cols.push(c);
     S.rows.forEach(function(r){ set(r.id, c.id, 0); });

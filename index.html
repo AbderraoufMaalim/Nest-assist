@@ -115,8 +115,11 @@ table.grid{border-collapse:separate;border-spacing:0;background:var(--panel);
 .id1{left:0;min-width:120px;width:120px}
 /* La largeur de "Num Pièce" suit le code le plus long (--w2, calculée au rendu) ;
    la colonne Qté se décale d'autant pour rester collée. */
-.id2{left:120px;min-width:var(--w2,118px);width:var(--w2,118px)}
-.id3{left:calc(120px + var(--w2,118px));min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
+/* --jbw : largeur de la colonne Valeur JobBOSS (0 quand elle est absente) —
+   les colonnes collantes suivantes se décalent d'autant. */
+.idj{left:120px;min-width:104px;width:104px}
+.id2{left:calc(120px + var(--jbw,0px));min-width:var(--w2,118px);width:var(--w2,118px)}
+.id3{left:calc(120px + var(--jbw,0px) + var(--w2,118px));min-width:62px;width:62px;border-right:2px solid var(--line-strong)}
 /* Plans de superposition des cellules collantes. Sans niveau explicite, tbody
    vient après thead dans le document et se dessine donc PAR-DESSUS l'en-tête :
    les lignes traversaient les cartes de tôle en défilant.
@@ -156,6 +159,10 @@ select{border:1px solid var(--exact-line);background:var(--field);border-radius:
 .step button:hover:not(:disabled){background:var(--exact-hover)}
 .step button:disabled{color:var(--exact-dim);cursor:default}
 .step b{min-width:19px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
+.dims{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--ink-faint)}
+.dim{width:42px;text-align:center;border:1px solid var(--exact-line);background:var(--field);
+  border-radius:6px;padding:3px 2px;font-size:12.5px;font-variant-numeric:tabular-nums;outline:none}
+.dim:focus{border-color:var(--exact);box-shadow:0 0 0 2px var(--exact-bg)}
 .step .u{font-size:9.5px;color:var(--ink-faint);padding-right:5px}
 .mult{margin:0 -9px;padding:7px 9px;background:var(--result-bg);border-top:1px solid var(--result-line);
   display:flex;align-items:baseline;justify-content:space-between}
@@ -483,10 +490,22 @@ function freeOf(c,rid){ return S.rows.filter(function(r){ return r.id !== rid &&
 function freeCount(c){ return S.rows.filter(function(r){ return isFree(c,r.id); }).length; }
 function canMove(c,rid){ return stOf(c,rid) !== "locked" && S.rows.length > 1 && freeOf(c,rid).length > 0; }
 
-function startLen(c){ return c.start === "full" ? S.std.len : +c.start; }
+function startLen(c){
+  if(c.start === "custom") return +c.cl || 0;
+  return c.start === "full" ? S.std.len : +c.start;
+}
+/* Retaille hors norme (72 × 20…) : rare. Pas pleine largeur, donc on ne peut
+   pas raisonner en longueur — sa consommation est sa SURFACE rapportée à
+   celle de la feuille standard : 72 × 20 / (96 × 48) = 0,3125. Aucune
+   retaille 12″/24″ pleine largeur ne peut en sortir : « Récupéré » est bloqué. */
+function isCustom(c){ return c.start === "custom"; }
+function customArea(c){ return (+c.cl || 0) * (+c.cw || 0); }
 function recovered(c){ return 12*c.r12 + 24*c.r24; }
 function consumed(c){ return startLen(c) - recovered(c); }
-function mult(c){ var v = consumed(c); return v > 0 ? v / S.std.len : 0; }
+function mult(c){
+  if(isCustom(c)) return customArea(c) / (S.std.len * S.std.wid);
+  var v = consumed(c); return v > 0 ? v / S.std.len : 0;
+}
 function weight(c){ return mult(c) * c.qty; }
 /* Les parts sont des ENTIERS en centièmes de pourcent : une colonne fait
    exactement 10 000. Avec des pourcents entiers, une petite pièce à 0,75 %
@@ -655,7 +674,10 @@ function delRow(id){
 /* =============== rendu =============== */
 function render(){
   var L = S.std.len, JB = hasQty();
+  /* Valeur JobBOSS collée au numéro de job : c'est la paire qu'on recopie
+     ensemble dans JobBOSS (ouvrir la job, saisir la valeur). */
   var head = '<thead><tr><th class="idc id1"><div class="hlabel">Num Job</div></th>'
+           + (JB ? '<th class="idc idj rj"><div class="hlabel r">Valeur JobBOSS</div></th>' : '')
            + '<th class="idc id2"><div class="hlabel">Num Pièce</div></th>'
            + '<th class="idc id3"><div class="hlabel c">Qté</div></th>';
 
@@ -663,17 +685,27 @@ function render(){
     /* Le plan de travail peut donner un format de tôle qu'on n'avait pas prévu :
        on l'ajoute à la liste au lieu de le perdre. */
     var vals = ["full","24","12"];
-    if(c.start !== "full" && vals.indexOf(String(c.start)) < 0) vals.push(String(c.start));
+    if(c.start !== "full" && c.start !== "custom" && vals.indexOf(String(c.start)) < 0) vals.push(String(c.start));
+    vals.push("custom");
     var opts = vals.map(function(v){
       var lab = v === "full" ? "Feuille "+L+"″"
+              : v === "custom" ? "Hors norme…"
               : (v === "24" || v === "12") ? "Retaille "+v+"″" : "Tôle "+v+"″";
       return '<option value="'+v+'"'+(String(c.start)===v?' selected':'')+'>'+lab+'</option>';
     }).join("");
+    var dims = isCustom(c)
+      ? '<div class="row"><span class="lab">Cotes</span><span class="dims">'
+        + '<input class="dim" data-dim="cl" value="'+esc(c.cl||"")+'" inputmode="decimal" placeholder="L">'
+        + '<span>&times;</span>'
+        + '<input class="dim" data-dim="cw" value="'+esc(c.cw||"")+'" inputmode="decimal" placeholder="l">'
+        + '<span class="u">&Prime;</span></span></div>'
+      : '';
     head += '<th class="colhead" data-col="'+c.id+'"><div class="card">'
       + '<div class="ctop"><span class="cname">Tôle '+(i+1)+'</span>'
       +   '<button class="icobtn" data-delcol="'+c.id+'" title="Supprimer cette tôle">'+IC.trash+'</button></div>'
       + '<div class="exact">'
       +   '<div class="row"><span class="lab">Départ</span><select data-k="start">'+opts+'</select></div>'
+      +   dims
       +   '<div class="row"><span class="lab">Récupéré</span><div class="step">'
       +     '<button data-k="r24" data-d="-1">&minus;</button><b data-o="r24">0</b>'
       +     '<span class="u">&times;24&Prime;</span><button data-k="r24" data-d="1">+</button></div></div>'
@@ -691,8 +723,7 @@ function render(){
       + '</div></th>';
   });
   head += '<th class="addcol"><button class="plus" id="addcol" title="Ajouter une tôle">'+IC.plus+'</button></th>'
-        + '<th class="rc" style="right:'+(JB?104:0)+'px"><div class="hlabel r">Consommation</div></th>'
-        + (JB ? '<th class="rj" style="right:0"><div class="hlabel r">Valeur JobBOSS</div></th>' : '')
+        + '<th class="rc" style="right:0"><div class="hlabel r">Consommation</div></th>'
         + '</tr></thead>';
 
   var body = '<tbody>';
@@ -708,6 +739,7 @@ function render(){
       +   '<input class="txt job" data-f="job" value="'+esc(r.job)+'" placeholder="125162">'
       +   '<button class="cp" data-copyjob="'+r.id+'" title="Copier le numéro de job">'+IC.copy+'</button></div>'
       +   (r.rev ? '<div class="rev">rév. '+esc(r.rev)+'</div>' : '') + '</td>'
+      + (JB ? '<td class="idc idj rj" data-o="jb"></td>' : '')
       + '<td class="idc id2"><input class="txt" data-f="piece" value="'+esc(r.piece)+'" placeholder="Piece 01" title="'+esc(r.piece)+'">'
       +   (r.dcode ? '<div class="rev" title="code du dashboard">↔ '+esc(r.dcode)+'</div>' : '') + '</td>'
       + '<td class="idc id3"><input class="qty" data-f="qty" value="'+esc(r.qty)+'" placeholder="—" inputmode="numeric"></td>';
@@ -720,19 +752,19 @@ function render(){
         + '<span class="tag" data-o="tag"></span></div></td>';
     });
     body += '<td class="addcol"></td>'
-          + '<td class="rc" style="right:'+(JB?104:0)+'px" data-o="cons"></td>'
-          + (JB ? '<td class="rj" style="right:0" data-o="jb"></td>' : '') + '</tr>';
+          + '<td class="rc" style="right:0" data-o="cons"></td></tr>';
   });
   body += '</tbody>';
 
   var foot = '<tfoot><tr><td class="idc id1"><div class="flab" style="text-align:left;padding-left:12px">Total</div></td>'
+           + (JB ? '<td class="idc idj rj">&mdash;</td>' : '')
            + '<td class="idc id2"></td><td class="idc id3 qsum" data-o="qsum"></td>';
   S.cols.forEach(function(c){ foot += '<td class="wgt" data-o="colwgt" data-col="'+c.id+'">1</td>'; });
   foot += '<td class="addcol"></td>'
-        + '<td class="rc grand" style="right:'+(JB?104:0)+'px" data-o="grand">0</td>'
-        + (JB ? '<td class="rj" style="right:0">&mdash;</td>' : '') + '</tr></tfoot>';
+        + '<td class="rc grand" style="right:0" data-o="grand">0</td></tr></tfoot>';
 
   document.getElementById("grid").innerHTML = head + body + foot;
+  document.getElementById("grid").style.setProperty("--jbw", JB ? "104px" : "0px");
   document.getElementById("addcol").onclick = addCol;
 
   var vide = S.rows.length === 0 && S.cols.length === 0;
@@ -818,12 +850,14 @@ function refresh(skip){
     th.querySelector('[data-o="mult"]').textContent = "× " + fmt(mult(c),4);
     th.querySelector('[data-o="wgt"]').textContent  = "= " + fmt(w,3) + " f.";
     var note = th.querySelector('[data-o="note"]');
-    if(cons <= 0){ note.textContent = "Récupéré ("+rec+"″) ≥ départ ("+startLen(c)+"″)"; note.classList.add("on"); }
+    if(isCustom(c) && !customArea(c)){ note.textContent = "Saisis les cotes de la retaille"; note.classList.add("on"); }
+    else if(!isCustom(c) && cons <= 0){ note.textContent = "Récupéré ("+rec+"″) ≥ départ ("+startLen(c)+"″)"; note.classList.add("on"); }
     else note.classList.remove("on");
 
     Array.prototype.forEach.call(th.querySelectorAll('.step button[data-k]'), function(b){
       var k = b.dataset.k, d = +b.dataset.d;
-      if(d < 0) b.disabled = c[k] <= (k === "qty" ? 1 : 0);
+      if(k !== "qty" && isCustom(c)) b.disabled = true;     /* rien de pleine largeur à récupérer */
+      else if(d < 0) b.disabled = c[k] <= (k === "qty" ? 1 : 0);
       else if(k === "qty") b.disabled = false;
       else b.disabled = (rec + (k === "r24" ? 24 : 12)) >= startLen(c);
     });
@@ -889,7 +923,9 @@ function refresh(skip){
   var toReview = S.cols.filter(function(c){ return !c.seen; }).length, n = S.cols.length;
   var byStart = {}, sheets = 0, rec12 = 0, rec24 = 0;
   S.cols.forEach(function(c){
-    var k = c.start === "full" ? "feuille" : "retaille " + c.start + "″";
+    var k = c.start === "full" ? "feuille"
+          : isCustom(c) ? "hors norme " + fmt(+c.cl||0,3) + "×" + fmt(+c.cw||0,3) + "″"
+          : "retaille " + c.start + "″";
     byStart[k] = (byStart[k]||0) + c.qty;
     sheets += c.qty; rec12 += c.r12*c.qty; rec24 += c.r24*c.qty;
   });
@@ -1453,9 +1489,10 @@ function proratePlan(R, stdLen, stdWid){
     var net = P.lines.map(function(l){ return (surf[l.code] || 0) * (l.per || 0); });
     var tot = net.reduce(function(a,b){ return a+b; }, 0);
     var pct = distribute(SCALE, net);
-    var o = orientSheet(P.len, P.wid, stdWid || S.std.wid);
-    return { prog:P, pct:pct, net:net, netTot:tot, len:o.len, wid:o.wid,
-             mult: o.len ? o.len / stdLen : 1 };
+    var sw = stdWid || S.std.wid, o = orientSheet(P.len, P.wid, sw);
+    /* pleine largeur : en longueur ; hors norme : en surface (identiques quand la largeur est standard) */
+    var m = !o.len ? 1 : (o.wid && o.wid !== sw) ? (o.len * o.wid) / (stdLen * sw) : o.len / stdLen;
+    return { prog:P, pct:pct, net:net, netTot:tot, len:o.len, wid:o.wid, mult:m };
   });
 }
 
@@ -1492,6 +1529,11 @@ function planFormat(R){
   if(!best) return null;
   if(best.len === S.std.len && best.wid === S.std.wid) return null;      /* déjà le bon */
   if(best.len < S.std.len && (best.len === 12 || best.len === 24)) return null;  /* retailles */
+  /* Retaille hors norme (72 × 20) : ni pleine largeur, ni plus grande que la
+     feuille. Ce n'est pas un format de feuille, le standard ne bouge pas.
+     Une 96 × 48 alors que le standard est 120 × 60, elle, garde la largeur
+     courante de 48″ : c'est bien un autre format de feuille. */
+  if(best.wid !== 48 && best.wid !== S.std.wid && best.len * best.wid < S.std.len * S.std.wid) return null;
   return best;
 }
 
@@ -1634,6 +1676,8 @@ function applyPlan(R){
     var P = x.prog;
     var start = (x.len === S.std.len || !x.len) ? "full" : String(x.len);   /* longueur orientée */
     var c = { id:uid++, start:start, r12:0, r24:0, qty:P.rep, st:{}, seen:false };
+    /* pas la largeur standard : retaille hors norme, comptée à la surface */
+    if(x.len && x.wid && x.wid !== S.std.wid){ c.start = "custom"; c.cl = x.len; c.cw = x.wid; }
     S.cols.push(c);
     S.rows.forEach(function(r){ set(r.id, c.id, 0); });
     P.lines.forEach(function(l,k){
@@ -1700,6 +1744,10 @@ document.addEventListener("input", function(e){
       if(was !== hasQty()) render();       /* la colonne Valeur apparaît / disparaît */
       else refresh(el);
     }
+  } else if(el.classList.contains("dim")){
+    var cd = colOf(el.closest("th.colhead").dataset.col);
+    cd[el.dataset.dim] = parseNum(el.value);
+    refresh();
   } else if(el.id === "stdlen"){
     var v = parseNum(el.value); if(v > 0){ S.std.len = v; render(); }
   } else if(el.id === "stdwid"){
@@ -1737,10 +1785,17 @@ document.addEventListener("change", function(e){
   } else if(el.dataset && el.dataset.k === "start"){
     var col = colOf(el.closest("th.colhead").dataset.col);
     col.start = el.value;
+    if(isCustom(col)){
+      col.r12 = 0; col.r24 = 0;
+      render();                                   /* fait apparaître les cotes */
+      var f = document.querySelector('th.colhead[data-col="'+col.id+'"] .dim');
+      if(f){ f.focus(); f.select(); }
+      return;
+    }
     while(recovered(col) >= startLen(col)){
       if(col.r24 > 0) col.r24--; else if(col.r12 > 0) col.r12--; else break;
     }
-    refresh();
+    render();                                     /* les cotes disparaissent si on quitte « hors norme » */
   }
 });
 

@@ -94,6 +94,7 @@ header{background:var(--panel);border-bottom:1px solid var(--line);padding:9px 1
   font-size:12px;color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px}
 .ghost:hover{border-color:var(--line-strong);color:var(--ink)}
 .ghost.ico{padding:7px 8px}
+.ghost.copied{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
 a.ghost{text-decoration:none}
 .prim{background:var(--exact);color:#fff;border-radius:7px;padding:7px 14px;font-size:12.5px;
   font-weight:600;display:inline-flex;align-items:center;gap:6px}
@@ -392,6 +393,7 @@ table.prev{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
   <div class="mfoot">
     <button class="prim" id="doimp" disabled>Ajouter les jobs</button>
     <button class="ghost" id="cancelimp">Annuler</button>
+    <button class="ghost" id="copyjobs" disabled title="Un numéro de job par ligne, pour le raccourci AutoHotkey"></button>
     <div class="spacer"></div>
     <span id="impcount" style="font-size:11.5px;color:var(--ink-faint)"></span>
   </div>
@@ -1195,6 +1197,7 @@ function analyse(){
       ? '<div class="err">Aucun numéro de job reconnu. Le numéro doit être un nombre à 6 chiffres, '
         + 'et les colonnes doivent être séparées par des tabulations (copie directe du dashboard).</div>' : "";
     document.getElementById("doimp").disabled = true;
+    document.getElementById("copyjobs").disabled = true;
     document.getElementById("impcount").textContent = "";
     return;
   }
@@ -1282,6 +1285,7 @@ function analyse(){
 
   box.innerHTML = h;
   document.getElementById("doimp").disabled = false;
+  document.getElementById("copyjobs").disabled = false;
   document.getElementById("impcount").textContent = IMP.rows.length + " ligne"
     + (IMP.rows.length>1?"s":"") + " reconnue" + (IMP.rows.length>1?"s":"");
 }
@@ -1930,8 +1934,31 @@ document.getElementById("doimp").onclick = function(){
   document.getElementById("pastebox").value = "";
   document.getElementById("prev").innerHTML = "";
   document.getElementById("doimp").disabled = true;
+  document.getElementById("copyjobs").disabled = true;
   document.getElementById("impcount").textContent = "";
   render();
+};
+
+/* ---- liste des numéros de job pour le raccourci AutoHotkey ----
+   Un numéro par ligne, dans l'ordre du collage, sans doublon. On prend TOUT
+   ce qui a été reconnu, cases cochées ou non : le besoin ici est la liste du
+   nest, pas ce qui entrera dans le tableau. Séparateur : saut de ligne simple, comme un texte
+   copié depuis le navigateur — c'est ce que le raccourci reçoit aujourd'hui. */
+function jobList(rows){
+  var seen = {}, out = [];
+  rows.forEach(function(r){ if(r.job && !seen[r.job]){ seen[r.job] = 1; out.push(r.job); } });
+  return out;
+}
+var COPYJOBS_TXT = IC.copy + "Copier les numéros de job";
+document.getElementById("copyjobs").innerHTML = COPYJOBS_TXT;
+document.getElementById("copyjobs").onclick = function(){
+  var b = this, list = jobList(IMP.rows);
+  if(!list.length) return;
+  copyToClipboard(list.join(String.fromCharCode(10)));   /* un numéro par ligne */
+  if(b._t) clearTimeout(b._t);
+  b.innerHTML = IC.check + list.length + " numéro" + (list.length > 1 ? "s" : "") + " copié" + (list.length > 1 ? "s" : "");
+  b.classList.add("copied");
+  b._t = setTimeout(function(){ b.innerHTML = COPYJOBS_TXT; b.classList.remove("copied"); }, 1600);
 };
 
 /* ---- import PDF ---- */
